@@ -1,0 +1,51 @@
+[package]
+name = "dato"
+version = "0.1.0"
+edition = "2021"
+default-run = "validator"
+
+[dependencies]
+# async
+tokio = { version = "1.39.2", features = ["full"] }
+async-trait = "0.1.81"
+futures = "0.3"
+axum = "0.7.5"
+
+# serialization
+clap = { version = "4.5.15", features = ["derive"] }
+serde_json = "1"
+serde = "1"
+
+# types
+bytes = "1.7.1"
+hex = "0.4.3"
+hashbrown = "0.14.5"
+
+# crypto
+blst = { version = "0.3.12", features = ["serde"] }
+
+# networking
+msg = { git = "https://github.com/chainbound/msg-rs" }
+
+# ethereum
+alloy = { version = "0.2", features = ["full"] }
+
+# telemetry
+tracing-subscriber = "0.3.18"
+tracing = "0.1.40"
+
+# misc
+thiserror = "1"
+eyre = "0.6.12"
+url = "2.5.2"
+reqwest = "0.12.5"
+rand = "0.8.5"
+
+
+[[bin]]
+name = "client"
+path = "bin/client.rs"
+
+[[bin]]
+name = "validator"
+path = "bin/validator.rs"
