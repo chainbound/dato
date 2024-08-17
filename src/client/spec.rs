@@ -41,6 +41,12 @@ pub trait ClientSpec {
         msg_id: B256,
     ) -> Result<CertifiedReadMessageResponse, ClientError>;
 
-    /// Subscribe to all messages in the given namespace on all validators.
+    /// Subscribe to all messages in the given namespace.
     async fn subscribe(&self, namespace: Namespace) -> Result<ReceiverStream<Record>, ClientError>;
+
+    /// Subscribe to all certified records in the given namespace.
+    async fn subscribe_certified(
+        &self,
+        namespace: Namespace,
+    ) -> Result<ReceiverStream<CertifiedRecord>, ClientError>;
 }

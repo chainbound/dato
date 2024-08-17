@@ -29,6 +29,7 @@ const READ_PATH: &str = "/api/v1/read";
 const READ_CERTIFIED_PATH: &str = "/api/v1/read_certified";
 const READ_MESSAGE_PATH: &str = "/api/v1/read_message";
 const SUBSCRIBE_PATH: &str = "/api/v1/subscribe";
+const SUBSCRIBE_CERTIFIED_PATH: &str = "/api/v1/subscribe_certified";
 
 impl Client {
     pub async fn run_api(self, port: u16) -> std::io::Result<JoinHandle<()>> {
@@ -38,6 +39,7 @@ impl Client {
             .route(READ_CERTIFIED_PATH, get(read_certified))
             .route(READ_MESSAGE_PATH, get(read_message))
             .route(SUBSCRIBE_PATH, get(subscribe))
+            .route(SUBSCRIBE_CERTIFIED_PATH, get(subscribe_certified))
             .with_state(Arc::new(self));
 
         let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
@@ -153,6 +155,38 @@ async fn subscribe(
     };
 
     let filtered = record_stream.map(|record| match serde_json::to_string(&record) {
+        Ok(json) => {
+            Ok(Event::default().data(json).event("record").retry(Duration::from_millis(50)))
+        }
+        Err(err) => {
+            error!(?err, "Failed to serialize record");
+            Err(BoxError::from("Internal server error"))
+        }
+    });
+
+    Sse::new(filtered).keep_alive(KeepAlive::default())
+}
+
+#[instrument(skip(client, namespace))]
+async fn subscribe_certified(
+    State(client): State<Arc<Client>>,
+    Query(namespace): Query<String>,
+) -> Sse<impl Stream<Item = Result<Event, BoxError>>> {
+    let namespace = Bytes::from(namespace.as_bytes().to_owned());
+    debug!("New subscribe request for namespace: {namespace}");
+
+    let certified_record_stream = match client.subscribe_certified(namespace).await {
+        Ok(stream) => stream,
+        Err(e) => {
+            error!(?e, "Failed to subscribe to namespace");
+            // TODO: fix error handling here, compiler error if doing the thing below
+            // let stream = once(async { Err(BoxError::from("Internal server error")) });
+            // return Sse::new(stream);
+            panic!();
+        }
+    };
+
+    let filtered = certified_record_stream.map(|record| match serde_json::to_string(&record) {
         Ok(json) => {
             Ok(Event::default().data(json).event("record").retry(Duration::from_millis(50)))
         }

@@ -1,15 +1,18 @@
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     time::{Duration, Instant},
 };
 
 use alloy::primitives::{Bytes, B256};
 use async_trait::async_trait;
 use blst::min_pk::{AggregateSignature, PublicKey};
+use eyre::ContextCompat;
 use futures::stream::{FuturesUnordered, StreamExt};
+use hashmore::FIFOMap;
 use msg::{tcp::Tcp, ReqError, ReqSocket, SubSocket};
 use tokio::{
-    net::ToSocketAddrs,
+    net::{lookup_host, ToSocketAddrs},
     sync::mpsc::{self, error::TrySendError},
     task::JoinSet,
 };
@@ -37,8 +40,8 @@ const READ_TIMEOUT: Duration = Duration::from_millis(1000);
 pub struct Client {
     /// Mapping from validator public keys to their IDs.
     validators: HashMap<usize, PublicKey>,
-    /// Mapping from validator IDs to their sockets.
-    validator_sockets: HashMap<usize, ReqSocket<Tcp>>,
+    /// Mapping from validator IDs to their socket addresses and sockets.
+    validator_sockets: HashMap<usize, (SocketAddr, ReqSocket<Tcp>)>,
 }
 
 impl Client {
@@ -55,23 +58,21 @@ impl Client {
     ) -> Result<(), ReqError> {
         // TODO: add timeout
         let mut socket = ReqSocket::new(Tcp::default());
-        socket.connect(addr).await?;
+
+        let mut addrs = lookup_host(addr).await?;
+        let endpoint = addrs.next().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "could not find any valid address",
+            )
+        })?;
+
+        socket.connect(endpoint).await?;
 
         self.validators.insert(validator.index, validator.pubkey);
-        self.validator_sockets.insert(validator.index, socket);
+        self.validator_sockets.insert(validator.index, (endpoint, socket));
 
         Ok(())
-    }
-
-    /// Check if the quorum has been reached. A quorum is reached when the number of votes is
-    /// greater than or equal to 2/3 of the total number of validators.
-    fn quorum_reached(&self, votes: usize) -> bool {
-        if self.validators.len() < 3 {
-            // 1 of 1 or 2 of 2 validators == quorum
-            return votes == self.validators.len();
-        }
-
-        votes >= 2 * self.validators.len() / 3
     }
 }
 
@@ -89,7 +90,7 @@ impl ClientSpec for Client {
         let request = Request::Write { namespace: namespace.clone(), message: message.clone() };
         let serialized_req = request.serialize();
 
-        for (index, socket) in &self.validator_sockets {
+        for (index, (_, socket)) in &self.validator_sockets {
             let cloned_req = serialized_req.clone();
             responses.push(async {
                 // Send the request to the validator with a timeout.
@@ -153,12 +154,12 @@ impl ClientSpec for Client {
             votes += 1;
             timestamps[index] = record.timestamp;
 
-            if self.quorum_reached(votes) {
+            if has_reached_quorum(self.validators.len(), votes) {
                 break;
             }
         }
 
-        if !self.quorum_reached(votes) {
+        if !has_reached_quorum(self.validators.len(), votes) {
             return Err(WriteError::NoQuorum { got: votes, needed: self.validators.len() }.into());
         }
 
@@ -221,7 +222,7 @@ impl ClientSpec for Client {
         let request = Request::ReadRange { namespace: namespace.clone(), start, end };
         let serialized_req = request.serialize();
 
-        for (index, socket) in &self.validator_sockets {
+        for (index, (_, socket)) in &self.validator_sockets {
             let cloned_req = serialized_req.clone();
             responses.push(async {
                 // Send the request to the validator with a timeout.
@@ -301,7 +302,7 @@ impl ClientSpec for Client {
         let request = Request::ReadMessage { namespace: namespace.clone(), msg_id };
         let serialized_req = request.serialize();
 
-        for (index, socket) in &self.validator_sockets {
+        for (index, (_, socket)) in &self.validator_sockets {
             let cloned_req = serialized_req.clone();
             responses.push(async {
                 // Send the request to the validator with a timeout.
@@ -397,8 +398,8 @@ impl ClientSpec for Client {
                 }
             }
 
-            if self.quorum_reached(available_votes) ||
-                self.quorum_reached(unavailable_votes) ||
+            if has_reached_quorum(self.validators.len(), available_votes) ||
+                has_reached_quorum(self.validators.len(), unavailable_votes) ||
                 available_votes + unavailable_votes >= self.validators.len()
             {
                 break;
@@ -412,7 +413,7 @@ impl ClientSpec for Client {
             "Quorum check"
         );
 
-        if self.quorum_reached(available_votes) {
+        if has_reached_quorum(self.validators.len(), available_votes) {
             let mut certified_record = CertifiedRecord {
                 timestamps: available_timestamps,
                 message,
@@ -424,7 +425,7 @@ impl ClientSpec for Client {
             debug!(elapsed = ?start_ts.elapsed(), median_timestamp = timestamp, "Quorum reached");
 
             Ok(CertifiedReadMessageResponse::Available(certified_record))
-        } else if self.quorum_reached(unavailable_votes) {
+        } else if has_reached_quorum(self.validators.len(), unavailable_votes) {
             let mut certified_unavailable_message = CertifiedUnavailableMessage {
                 timestamps: unavailable_timestamps,
                 msg_id,
@@ -451,18 +452,18 @@ impl ClientSpec for Client {
         let serialized_req = request.serialize();
 
         // request subscription to the selected namespace from all validators
-        for (index, socket) in &self.validator_sockets {
+        for (index, (remote_socket_addr, socket)) in &self.validator_sockets {
             let cloned_req = serialized_req.clone();
             responses.push(async {
                 // Send the request to the validator with a timeout.
                 match tokio::time::timeout(WRITE_TIMEOUT, socket.request(cloned_req.into())).await {
-                    Ok(Ok(response)) => Some((*index, response)),
+                    Ok(Ok(response)) => Some((*index, *remote_socket_addr, response)),
                     Ok(Err(e)) => {
                         warn!(error = %e, "Error subscribing to validator {}", *index);
                         None
                     }
                     Err(e) => {
-                        warn!(error = %e, "Timed out writing to validator {}", *index);
+                        warn!(error = %e, "Timed out subscribing to validator {}", *index);
                         None
                     }
                 }
@@ -472,7 +473,7 @@ impl ClientSpec for Client {
         let mut validator_publisher_sockets = HashMap::new();
 
         // collect all publisher socket addresses from validators
-        while let Some(Some((index, bytes))) = responses.next().await {
+        while let Some(Some((index, remote_addr, bytes))) = responses.next().await {
             trace!("Received response from validator {index}: {bytes:?}");
 
             let sub_response = match serde_json::from_slice::<SubscribeResponse>(&bytes) {
@@ -483,31 +484,35 @@ impl ClientSpec for Client {
                 }
             };
 
-            validator_publisher_sockets.insert(sub_response.addr, index);
+            validator_publisher_sockets.insert((remote_addr.ip(), sub_response.port), index);
         }
 
-        // now handle new messages to stream to the API consumer
         let (record_sub_tx, record_sub_rx) = mpsc::channel(512);
-        let mut sub_socket = SubSocket::new(Tcp::default());
 
-        let topic_string = String::from_utf8_lossy(&namespace).to_string();
-        for (pub_socket_addr, validator_index) in validator_publisher_sockets {
-            // TODO: use index to keep track of which validator we're connected to
-
-            if let Err(err) = sub_socket.connect(pub_socket_addr).await {
-                warn!(error = %err, "Failed to connect to validator publisher");
-                return Err(SubscriptionError::FailedToConnect.into());
-            }
-            if let Err(err) = sub_socket.subscribe(topic_string.clone()).await {
-                warn!(error = %err, "Failed to subscribe to namespace");
-                return Err(SubscriptionError::FailedToSubscribe.into());
-            }
-        }
-
-        // handle each subscription in a background task
-        let record_sub_tx = record_sub_tx.clone();
         tokio::spawn(async move {
+            let mut sub_socket = SubSocket::new(Tcp::default());
+
+            let topic_string = String::from_utf8_lossy(&namespace).to_string();
+            for (pub_socket_addr, validator_index) in validator_publisher_sockets {
+                // TODO: use index to keep track of which validator we're connected to
+
+                let remote_addr = if let Err(err) = sub_socket.connect(pub_socket_addr).await {
+                    warn!(error = %err, "Failed to connect to validator publisher");
+                    return;
+                };
+                debug!(?pub_socket_addr, "Connected to publisher");
+
+                if let Err(err) = sub_socket.subscribe(topic_string.clone()).await {
+                    warn!(error = %err, "Failed to subscribe to namespace");
+                    return;
+                }
+
+                info!(?pub_socket_addr, "Subscribed to publisher topic");
+            }
+
             while let Some(pub_msg) = sub_socket.next().await {
+                trace!(?pub_msg, "Received message from publisher");
+
                 if let Ok(record) = serde_json::from_slice::<Record>(&pub_msg.into_payload()) {
                     // TODO: use map of connected pub sockets to index and index to pubkey
                     // to verify the signature of each incoming message
@@ -530,4 +535,54 @@ impl ClientSpec for Client {
 
         Ok(ReceiverStream::new(record_sub_rx))
     }
+
+    async fn subscribe_certified(
+        &self,
+        namespace: Namespace,
+    ) -> Result<ReceiverStream<CertifiedRecord>, ClientError> {
+        // perform a regular subscription to get all records
+        let mut record_stream = self.subscribe(namespace.clone()).await?;
+
+        let (certified_record_tx, certified_record_rx) = mpsc::channel(512);
+        let validators_count = self.validators.len();
+
+        // spawn a background task to aggregate records into certified records and
+        // send them to the consumer stream
+        tokio::spawn(async move {
+            let mut records_by_id = FIFOMap::<B256, Vec<Record>>::with_capacity(1024);
+
+            while let Some(record) = record_stream.next().await {
+                let id = record.message_digest(&namespace);
+
+                // TODO: clean this up with FIFOMap::entry API when available
+                let records = if let Some(records) = records_by_id.get_mut(&id) {
+                    records.push(record);
+                    records
+                } else {
+                    records_by_id.insert(id, vec![record]);
+                    records_by_id.get_mut(&id).unwrap()
+                };
+
+                if has_reached_quorum(validators_count, records.len()) {
+                    let certified_record = CertifiedRecord::from_records_unchecked(records);
+                    if let Err(err) = certified_record_tx.send(certified_record).await {
+                        warn!(error = %err, "Failed to send certified record");
+                    }
+                }
+            }
+        });
+
+        Ok(ReceiverStream::new(certified_record_rx))
+    }
+}
+
+/// Function to compute if the quorum has been reached. A quorum is reached when the number of votes
+/// is greater than or equal to 2/3 of the total number of validators.
+fn has_reached_quorum(total_validators: usize, votes: usize) -> bool {
+    if total_validators < 3 {
+        // 1 of 1 or 2 of 2 validators == quorum
+        return votes == total_validators;
+    }
+
+    votes >= 2 * total_validators / 3
 }

@@ -157,6 +157,22 @@ impl CertifiedRecord {
             self.timestamps[self.timestamps.len() / 2]
         }
     }
+
+    /// Returns the certified record from a list of records.
+    /// This method DOES NOT check the hash of each individual record message.
+    pub fn from_records_unchecked(records: &[Record]) -> Self {
+        let timestamps = records.iter().map(|r| r.timestamp).collect::<Vec<_>>();
+        let sigs = records.iter().map(|r| r.signature).collect::<Vec<_>>();
+        let message = records[0].message.clone();
+
+        // TODO: there's probably a better way to do this
+        let mut quorum_signature = AggregateSignature::from_signature(&sigs[0]);
+        for sig in sigs.iter().skip(1) {
+            quorum_signature.add_signature(sig, false);
+        }
+
+        CertifiedRecord { timestamps, message, quorum_signature }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -353,6 +369,6 @@ impl ValidatorIdentity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscribeResponse {
-    pub addr: SocketAddr,
+    pub port: u16,
     pub auth_token: Bytes,
 }

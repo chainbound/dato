@@ -13,7 +13,7 @@ use futures::{ready, StreamExt};
 use hashbrown::{HashMap, HashSet};
 use msg::{tcp::Tcp, PubError, PubSocket, RepSocket, Request as MsgRequest};
 use tokio::{sync::mpsc, task::JoinHandle};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 mod store;
 pub use store::{DataStore, InMemoryStore};
@@ -22,7 +22,10 @@ mod spec;
 pub use spec::ValidatorSpec;
 
 use crate::{
-    common::{Log, Message, Namespace, ReadMessageResponse, Record, Timestamp, UnavailableMessage},
+    common::{
+        Log, Message, Namespace, ReadMessageResponse, Record, SubscribeResponse, Timestamp,
+        UnavailableMessage,
+    },
     primitives::{bls::sign_with_prefix, Request},
 };
 
@@ -109,12 +112,6 @@ impl<DS: DataStore + 'static> Validator<DS> {
         })
     }
 
-    /// Run the validator instance forever, handling incoming requests from clients.
-    /// This method returns a handle to the spawned Tokio task.
-    pub fn run_forever(self) -> JoinHandle<()> {
-        tokio::spawn(self)
-    }
-
     /// Address of the TCP socket at which the validator is listening for incoming requests.
     pub fn local_addr(&self) -> Option<SocketAddr> {
         self.local_addr
@@ -131,7 +128,7 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
 
         loop {
             // process incoming requests from clients
-            if let Some(req) = ready!(this.conn.poll_next_unpin(cx)) {
+            if let Poll::Ready(Some(req)) = this.conn.poll_next_unpin(cx) {
                 let request = match serde_json::from_slice::<Request>(req.msg()) {
                     Ok(request) => request,
                     Err(err) => {
@@ -155,6 +152,7 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
 
                         // Send a request to publish the record to the active subscribers
                         if this.active_subscriptions.contains(&namespace) {
+                            info!(?namespace, "Sending record to publish queue");
                             if let Err(err) = publisher_queue_tx.try_send((namespace, response)) {
                                 error!(?err, "Failed to add record to the publish queue");
                             }
@@ -187,6 +185,21 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
                     Request::Subscribe { namespace } => {
                         debug!(?namespace, "Received subscribe request");
                         this.subscribe(namespace);
+
+                        let res = SubscribeResponse {
+                            port: this.pub_socket.local_addr().expect("Publisher not bound").port(),
+                            // TODO: impl auth
+                            auth_token: Bytes::from("noop").into(),
+                        };
+
+                        let Ok(response) = serde_json::to_vec(&res).map(Bytes::from) else {
+                            error!("Failed to serialize subscribe response");
+                            continue;
+                        };
+
+                        if let Err(err) = req.respond(response) {
+                            error!(?err, "Failed to respond to subscribe request");
+                        }
                     }
                 }
 
@@ -194,7 +207,10 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
             }
 
             // try to flush any pending messages to publish to active subscribers
-            if let Some((namespace, serialized_record)) = ready!(publisher_queue_rx.poll_recv(cx)) {
+            if let Poll::Ready(Some((namespace, serialized_record))) =
+                publisher_queue_rx.poll_recv(cx)
+            {
+                info!(?namespace, "Publishing record to subscribers");
                 let topic_string = String::from_utf8_lossy(&namespace).to_string();
                 if let Err(err) = this.pub_socket.try_publish(topic_string, serialized_record) {
                     error!(?err, "Failed to publish serialized record to subscriber");
@@ -202,8 +218,8 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
 
                 continue;
             }
-        }
 
-        Poll::Pending
+            return Poll::Pending
+        }
     }
 }

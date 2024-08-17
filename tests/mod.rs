@@ -4,7 +4,7 @@ use alloy::primitives::B256;
 use bytes::Bytes;
 use futures::StreamExt;
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{debug, info};
 
 mod hurl;
 
@@ -151,14 +151,46 @@ async fn test_subscribe() -> eyre::Result<()> {
     let mut stream = client.subscribe(namespace.clone()).await?;
     info!("Subscribed to namespace");
 
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
     let message = Message(Bytes::from_static(b"made with chatgpt").into());
     let record = client.write(namespace.clone(), message).await?;
+    debug!(?record, "Wrote record 1");
 
     let received = stream.next().await.expect("Received message");
     assert_eq!(received.message, record.message);
+    debug!(?received, "Received message");
+
+    let message = Message(Bytes::from_static(b"made with chatgpt 2").into());
+    let record = client.write(namespace.clone(), message).await?;
+    debug!(?record, "Wrote record 2");
+
+    let received = stream.next().await.expect("Received message");
+    assert_eq!(received.message, record.message);
+    debug!(?received, "Received message");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_subscribe_certified() -> eyre::Result<()> {
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let (validator_addr, pubkey) = spin_up_validator().await?;
+    info!("Validator listening on: {}", validator_addr);
+
+    let mut client = Client::new();
+    client.connect_validator(ValidatorIdentity::new(0, pubkey), validator_addr).await?;
+
+    let namespace: Namespace = Bytes::from_static(b"test").into();
+    let mut stream = client.subscribe_certified(namespace.clone()).await?;
+    info!("Subscribed to certified namespace");
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
 
     let message = Message(Bytes::from_static(b"made with chatgpt").into());
     let record = client.write(namespace.clone(), message).await?;
+    debug!(?record, "Wrote record 1");
 
     let received = stream.next().await.expect("Received message");
     assert_eq!(received.message, record.message);

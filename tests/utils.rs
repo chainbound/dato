@@ -8,7 +8,7 @@ pub async fn spin_up_validator() -> eyre::Result<(SocketAddr, BlsPublicKey)> {
     let pubkey = dummy_sk.sk_to_pk();
     let validator = Validator::new_in_memory(dummy_sk, 0).await?;
     let validator_addr = validator.local_addr().expect("Listening");
-    validator.run_forever();
+    tokio::spawn(validator);
 
     Ok((validator_addr, pubkey))
 }

@@ -41,6 +41,7 @@ thiserror = "1"
 eyre = "0.6.12"
 url = "2.5.2"
 reqwest = "0.12.5"
+reqwest-eventsource = "0.6"
 rand = "0.8.5"
 
 

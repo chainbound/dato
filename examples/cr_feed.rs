@@ -1,11 +1,14 @@
-use std::{sync::Arc, time::Duration};
-
 use clap::Parser;
+use futures::StreamExt;
 use rand::Rng;
 use reqwest::Client;
+use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
+use std::{sync::Arc, time::Duration};
 use tokio::{sync::Semaphore, task, time::sleep};
-use tracing::{debug, error, info, instrument};
+use tracing::*;
+
+use dato::CertifiedRecord;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -14,7 +17,7 @@ struct Args {
     num_txns: u64,
 
     /// API server address
-    #[arg(short, long, default_value = "http://localhost:8080")]
+    #[arg(short, long, default_value = "http://localhost:8000")]
     api_server: String,
 }
 
@@ -42,7 +45,13 @@ async fn send_write_request(client: Arc<Client>, api_server: String, request: Wr
     }
 }
 
-#[instrument]
+/// Demo game plan:
+/// 1. Subscribe to certified records
+/// 2. Start sending write requests and saving the digest + timestamp
+/// 3. Aggregate a batch of n responses, and print:
+///    - Average time between write request and the certified record event
+///    - Median time between write request and the certified record event
+///    - P1, P(2x/3) and then certified timestamp
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -51,15 +60,33 @@ async fn main() {
     let client = Arc::new(Client::new());
     let semaphore = Arc::new(Semaphore::new(100)); // Limit concurrent requests
 
+    let mut subscription =
+        EventSource::get(format!("{}/api/v1/subscribe_certified?namespace=dato", args.api_server));
+
+    tokio::spawn(async move {
+        while let Some(event) = subscription.next().await {
+            match event {
+                Ok(Event::Open) => {
+                    info!("Subscribed to certified records")
+                }
+                Ok(Event::Message(msg)) => {
+                    let record = serde_json::from_str::<CertifiedRecord>(&msg.data).unwrap();
+                    info!("Received certified record: {:?}", record);
+                }
+                Err(err) => {
+                    error!("Event source error: {:?}", err);
+                }
+            }
+        }
+    });
+
     for _ in 0..args.num_txns {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let client = client.clone();
         let api_server = args.api_server.clone();
 
-        let request = WriteRequest {
-            namespace: "default_namespace".to_string(),
-            message: generate_random_message(),
-        };
+        let request =
+            WriteRequest { namespace: "dato".to_string(), message: generate_random_message() };
 
         task::spawn(async move {
             send_write_request(client, api_server, request).await;
