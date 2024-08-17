@@ -135,12 +135,17 @@ async fn read_message(
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+#[derive(Debug, Deserialize)]
+struct NamespaceParams {
+    namespace: String,
+}
+
 #[instrument(skip(client, params))]
 async fn subscribe(
     State(client): State<Arc<Client>>,
-    Query(params): Query<String>,
+    Query(params): Query<NamespaceParams>,
 ) -> Sse<impl Stream<Item = Result<Event, BoxError>>> {
-    let namespace = Bytes::from(params.as_bytes().to_owned());
+    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
     debug!("New subscribe request for namespace: {namespace}");
 
     let record_stream = match client.subscribe(namespace).await {
@@ -167,12 +172,12 @@ async fn subscribe(
     Sse::new(filtered).keep_alive(KeepAlive::default())
 }
 
-#[instrument(skip(client, namespace))]
+#[instrument(skip(client, params))]
 async fn subscribe_certified(
     State(client): State<Arc<Client>>,
-    Query(namespace): Query<String>,
+    Query(params): Query<NamespaceParams>,
 ) -> Sse<impl Stream<Item = Result<Event, BoxError>>> {
-    let namespace = Bytes::from(namespace.as_bytes().to_owned());
+    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
     debug!("New subscribe request for namespace: {namespace}");
 
     let certified_record_stream = match client.subscribe_certified(namespace).await {
