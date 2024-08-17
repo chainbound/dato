@@ -1,15 +1,20 @@
-use std::sync::Arc;
+use std::{convert::Infallible, pin::Pin, sync::Arc, time::Duration};
 
 use alloy::primitives::{Bytes, B256};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
-    Json, Router,
+    BoxError, Json, Router,
 };
+use futures::{stream::once, Stream, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, info, instrument};
 
 use crate::{
@@ -32,11 +37,12 @@ impl Client {
             .route(READ_PATH, get(read))
             .route(READ_CERTIFIED_PATH, get(read_certified))
             .route(READ_MESSAGE_PATH, get(read_message))
+            .route(SUBSCRIBE_PATH, get(subscribe))
             .with_state(Arc::new(self));
 
-        let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+        let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
 
-        let addr = listener.local_addr().expect("Failed to get local address");
+        let addr = listener.local_addr()?;
 
         info!("API server running on {addr}");
 
@@ -112,13 +118,13 @@ struct ReadMessageParams {
     msg_id: B256,
 }
 
-#[tracing::instrument(skip(client, params))]
+#[instrument(skip(client, params))]
 async fn read_message(
     State(client): State<Arc<Client>>,
     Query(params): Query<ReadMessageParams>,
 ) -> Result<Json<CertifiedReadMessageResponse>, StatusCode> {
     let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
-    tracing::debug!("New read_message request for namespace: {namespace}");
+    debug!("New read_message request for namespace: {namespace}");
 
     client
         .read_message(namespace, params.msg_id)
@@ -127,23 +133,34 @@ async fn read_message(
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-#[tracing::instrument(skip(client, params))]
+#[instrument(skip(client, params))]
 async fn subscribe(
     State(client): State<Arc<Client>>,
-    Query(params): Query<ReadMessageParams>,
-) -> Result<Json<()>, StatusCode> {
-    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
-    tracing::debug!("New subscribe request for namespace: {namespace}");
+    Query(params): Query<String>,
+) -> Sse<impl Stream<Item = Result<Event, BoxError>>> {
+    let namespace = Bytes::from(params.as_bytes().to_owned());
+    debug!("New subscribe request for namespace: {namespace}");
 
     let record_stream = match client.subscribe(namespace).await {
         Ok(stream) => stream,
         Err(e) => {
             error!(?e, "Failed to subscribe to namespace");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            // TODO: fix error handling here, compiler error if doing the thing below
+            // let stream = once(async { Err(BoxError::from("Internal server error")) });
+            // return Sse::new(stream);
+            panic!();
         }
     };
 
-    // TODO: open SSE connection
+    let filtered = record_stream.map(|record| match serde_json::to_string(&record) {
+        Ok(json) => {
+            Ok(Event::default().data(json).event("record").retry(Duration::from_millis(50)))
+        }
+        Err(err) => {
+            error!(?err, "Failed to serialize record");
+            Err(BoxError::from("Internal server error"))
+        }
+    });
 
-    Ok(Json(()))
+    Sse::new(filtered).keep_alive(KeepAlive::default())
 }

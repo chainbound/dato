@@ -154,8 +154,10 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
                         }
 
                         // Send a request to publish the record to the active subscribers
-                        if let Err(err) = publisher_queue_tx.try_send((namespace, response)) {
-                            error!(?err, "Failed to add record to publish queue");
+                        if this.active_subscriptions.contains(&namespace) {
+                            if let Err(err) = publisher_queue_tx.try_send((namespace, response)) {
+                                error!(?err, "Failed to add record to the publish queue");
+                            }
                         }
                     }
                     Request::ReadRange { namespace, start, end } => {
@@ -193,11 +195,9 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
 
             // try to flush any pending messages to publish to active subscribers
             if let Some((namespace, serialized_record)) = ready!(publisher_queue_rx.poll_recv(cx)) {
-                if this.active_subscriptions.contains(&namespace) {
-                    let topic_string = String::from_utf8_lossy(&namespace).to_string();
-                    if let Err(err) = this.pub_socket.try_publish(topic_string, serialized_record) {
-                        error!(?err, "Failed to publish serialized record to subscriber");
-                    }
+                let topic_string = String::from_utf8_lossy(&namespace).to_string();
+                if let Err(err) = this.pub_socket.try_publish(topic_string, serialized_record) {
+                    error!(?err, "Failed to publish serialized record to subscriber");
                 }
 
                 continue;
