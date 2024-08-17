@@ -45,6 +45,32 @@ With DATO, we can optimistically replace the relay by acting as a "record of com
 5. Proposer misses the block, but can request a certificate of UNAVAILABILITY for the timestamp at $T_{commit} + \Delta$
 6. Proposer uses the certficiate of UNAVAILABILITY to slash the builder
 
+Fair exchange problems also show up in various proposer commitment & preconf protocols like [Bolt](https://chainbound.github.io/bolt-docs), which is where we initially got the idea.
+
+### Censorship-resistant message feeds
+In the case of single-sequencer protocols like current rollups, or TEE-run auctions, it is currently not possible to attribute censorship faults. Having a verifiable record of messages fixes that issue, and can reliably detect even very short-term censorship.
+
+Sequencers could commit to reading their inputs from DATO (as an additional channel next to direct RPC). Any message sent on DATO would need to be included within some delta set by the protocol. If these messages are not included within that delta, users can use the certificate to attribute a censorship fault. For mempool privacy, transactions on this layer can be encrypted with the sequencer public key.
+
+TEEs could also commit to reading their bids from DATO, which (in the case of verifiable auction rules) could allow anyone to verify the outcome of an auction. This could detect the censorship of bids.
+
+### BRAID simultaneous release & last-look
+BRAID (an implementation of MCP), has an incentive problem when various proposers for a round are supposed to release their partial block. This is because other proposers could benefit from looking the contents of other proposers' blocks in the case they contain profitable transactions. They can then steal these transactions and put them in their own partial blocks.
+
+A potential solution could look like this:
+1. Proposers threshold encrypt their partial blocks and broadcast it on DATO along with a "delay" request
+2. DATO validators timestamp the request, but only reveal it after the delay (timelock)
+3. Clients can collect the quorum certificate after the delay and decrypt the payload
+
+The only way for proposers to steal the payloads from other proposers is for them to wait until the timelock is completed and collect the quorum certificate. Only then will they be able to broadcast their partial blocks, which would be too late and detectable.
+
+NOTE: this would require some added functionality to DATO for the time locking functionality.
+
+## Further Work
+- Analyzing the security properties (tolerated threshold adversary, network models)
+- Performance analysis & testing
+- DATO for threshold encryption
+
 ## References & Prior Work
 - https://collective.flashbots.net/t/current-thinking-for-consensus/2695
 - https://www.commonprefix.com/static/clients/flashbots/flashbots_report.pdf
