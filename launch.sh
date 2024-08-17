@@ -7,6 +7,8 @@ latency_limit="400"
 
 build=false
 
+trap cleanup EXIT
+
 function usage() {
     echo "Usage: $0 -p <port> -r <registry_path> -l <latency_limit>"
     echo "  -p  Set the client API port (default: $client_port)"
@@ -16,6 +18,12 @@ function usage() {
     exit 1
 }
 
+function cleanup() {
+    echo "Cleaning up"
+    docker rm --force $(docker ps -a -q)
+    docker network rm dato-net
+    exit 0
+}
 
 # Parse options
 while getopts "p:r:l:bh" opt; do
@@ -70,7 +78,3 @@ echo "Starting dato-client"
 docker run -d --network dato-net --name dato-client -p $client_port:$client_port -e RUST_LOG=trace dato-client --registry-path "/${registry_path}" --api-port $client_port
 
 docker logs -f dato-client
-
-# Clean up
-echo "Cleaning up"
-docker rm --force $(docker ps -a -q)
