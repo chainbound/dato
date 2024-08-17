@@ -11,7 +11,7 @@ mod primitives;
 pub use primitives::bls;
 
 mod client;
-pub use client::{run_api, Client, ClientSpec};
+pub use client::{Client, ClientSpec};
 
 pub use common::ValidatorIdentity;
 
