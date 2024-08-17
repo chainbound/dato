@@ -87,6 +87,9 @@ You can then run the demo example with:
 cargo run --example cr_feed
 ```
 
+The demo is setup like this:
+![](./demo-setup.png)
+
 ## Further Work
 - Analyzing the security properties (tolerated threshold adversary, network models)
 - Performance analysis & testing
