@@ -49,7 +49,7 @@ impl Client {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WriteRequest {
-    namespace: Bytes,
+    namespace: String,
     message: Bytes,
 }
 
@@ -58,10 +58,11 @@ async fn write(
     State(client): State<Arc<Client>>,
     Json(request): Json<WriteRequest>,
 ) -> Result<Json<CertifiedRecord>, StatusCode> {
+    let namespace = Bytes::from(request.namespace.as_bytes().to_owned());
     debug!(namespace = %request.namespace, "New write request");
 
     client
-        .write(request.namespace, request.message.into())
+        .write(namespace, request.message.into())
         .await
         .map(Json)
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
@@ -69,7 +70,7 @@ async fn write(
 
 #[derive(Debug, Deserialize)]
 struct ReadParams {
-    namespace: Bytes,
+    namespace: String,
     start: u64,
     end: u64,
 }
@@ -79,10 +80,11 @@ async fn read(
     State(client): State<Arc<Client>>,
     Query(params): Query<ReadParams>,
 ) -> Result<Json<Log>, StatusCode> {
+    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
     debug!(namespace = %params.namespace, "New read request");
 
     client
-        .read(params.namespace, params.start.into(), params.end.into())
+        .read(namespace, params.start.into(), params.end.into())
         .await
         .map(Json)
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
@@ -93,10 +95,11 @@ async fn read_certified(
     State(client): State<Arc<Client>>,
     Query(params): Query<ReadParams>,
 ) -> Result<Json<CertifiedLog>, StatusCode> {
+    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
     debug!(namespace = %params.namespace, "New read_certified request");
 
     client
-        .read_certified(params.namespace, params.start.into(), params.end.into())
+        .read_certified(namespace, params.start.into(), params.end.into())
         .await
         .map(Json)
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)

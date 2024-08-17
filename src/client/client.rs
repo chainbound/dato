@@ -101,7 +101,8 @@ impl ClientSpec for Client {
             });
         }
 
-        let mut timestamps = Vec::with_capacity(self.validators.len());
+        // Pre-allocate and set to all zeroes
+        let mut timestamps = vec![Timestamp::default(); self.validators.len()];
 
         let mut quorum_signature: Option<AggregateSignature> = None;
         let mut votes = 0;
@@ -144,7 +145,7 @@ impl ClientSpec for Client {
 
             // Increase the number of votes, and store the timestamp
             votes += 1;
-            timestamps.insert(index, record.timestamp);
+            timestamps[index] = record.timestamp;
 
             if self.quorum_reached(votes) {
                 break;
@@ -312,8 +313,9 @@ impl ClientSpec for Client {
             });
         }
 
-        let mut available_timestamps = Vec::with_capacity(self.validators.len());
-        let mut unavailable_timestamps = Vec::with_capacity(self.validators.len());
+        // IMPORTANT: Pre-allocate and set to all zeroes
+        let mut available_timestamps = vec![Timestamp::default(); self.validators.len()];
+        let mut unavailable_timestamps = vec![Timestamp::default(); self.validators.len()];
 
         let mut available_quorum_signature: Option<AggregateSignature> = None;
         let mut unavailable_quorum_signature: Option<AggregateSignature> = None;
@@ -364,7 +366,7 @@ impl ClientSpec for Client {
                     }
 
                     available_votes += 1;
-                    available_timestamps.insert(index, record.timestamp);
+                    available_timestamps[index] = record.timestamp;
                 }
                 ReadMessageResponse::Unavailable(unavailable) => {
                     let pubkey = self.validators.get(&index).expect("Validator not found");
@@ -385,7 +387,7 @@ impl ClientSpec for Client {
                     }
 
                     unavailable_votes += 1;
-                    unavailable_timestamps.insert(index, unavailable.timestamp);
+                    unavailable_timestamps[index] = unavailable.timestamp;
                 }
             }
 
