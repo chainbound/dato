@@ -60,7 +60,12 @@ impl Client {
     /// Check if the quorum has been reached. A quorum is reached when the number of votes is
     /// greater than or equal to 2/3 of the total number of validators.
     fn quorum_reached(&self, votes: usize) -> bool {
-        votes == self.validators.len() || votes >= 2 * self.validators.len() / 3
+        if self.validators.len() < 3 {
+            // 1 of 1 or 2 of 2 validators == quorum
+            return votes == self.validators.len();
+        }
+
+        votes >= 2 * self.validators.len() / 3
     }
 }
 
@@ -424,7 +429,6 @@ impl ClientSpec for Client {
 
             Ok(CertifiedReadMessageResponse::Unavailable(certified_unavailable_message))
         } else {
-            debug!(available_votes, unavailable_votes, "No quorum reached");
             Err(ReadError::NoQuorum { available: available_votes, unavailable: unavailable_votes })
         }
     }
