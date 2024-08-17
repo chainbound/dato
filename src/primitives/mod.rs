@@ -13,7 +13,7 @@ pub enum Request {
     Write { namespace: Namespace, message: Message },
     /// Request to read a range of messages from the log.
     /// Expects a [`crate::Log`] response
-    Read { namespace: Namespace, start: Timestamp, end: Timestamp },
+    ReadRange { namespace: Namespace, start: Timestamp, end: Timestamp },
     /// Request to read a single message from the log.
     /// Expects a [`crate::Log`] response
     ReadMessage { namespace: Namespace, msg_id: B256 },

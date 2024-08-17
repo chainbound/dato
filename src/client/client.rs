@@ -211,7 +211,7 @@ impl ClientSpec for Client {
         let start_ts = Instant::now();
         let mut responses = FuturesUnordered::new();
 
-        let request = Request::Read { namespace: namespace.clone(), start, end };
+        let request = Request::ReadRange { namespace: namespace.clone(), start, end };
         let serialized_req = request.serialize();
 
         for (index, socket) in &self.validator_sockets {

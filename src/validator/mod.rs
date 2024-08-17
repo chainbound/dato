@@ -44,7 +44,7 @@ impl<DS: DataStore + Send + Sync> ValidatorSpec for Validator<DS> {
         record
     }
 
-    fn read(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log {
+    fn read_range(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log {
         self.store.read_range(namespace, start, end)
     }
 
@@ -103,9 +103,9 @@ impl<DS: DataStore + Send + Sync> Validator<DS> {
                     error!(?err, "Failed to respond to request");
                 }
             }
-            Request::Read { namespace, start, end } => {
+            Request::ReadRange { namespace, start, end } => {
                 debug!(?namespace, "Received read request");
-                let log = self.read(namespace, start, end);
+                let log = self.read_range(namespace, start, end);
                 let Ok(response) = serde_json::to_vec(&log) else {
                     error!("Failed to serialize log");
                     return;
