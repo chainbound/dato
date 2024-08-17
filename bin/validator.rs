@@ -56,7 +56,7 @@ async fn main() -> eyre::Result<()> {
             match run_opts.backend {
                 BackendType::InMemory => {
                     info!("Running validator with in-memory backend on port {}", run_opts.port);
-                    Validator::new_in_memory(sk, run_opts.port).await?.run().await;
+                    Validator::new_in_memory(sk, run_opts.port).await?.run_forever();
                 }
                 BackendType::Filesystem => {
                     info!("Running validator with filesystem backend on port {}", run_opts.port);

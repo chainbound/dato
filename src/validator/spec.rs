@@ -12,4 +12,7 @@ pub trait ValidatorSpec {
 
     /// Reads a single log record from the store by its message ID.
     fn read_message(&self, namespace: Namespace, msg_id: B256) -> ReadMessageResponse;
+
+    /// Allow clients to subscribe to all messages in a namespace.
+    fn subscribe(&mut self, namespace: Namespace);
 }

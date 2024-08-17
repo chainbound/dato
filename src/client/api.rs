@@ -23,6 +23,7 @@ const WRITE_PATH: &str = "/api/v1/write";
 const READ_PATH: &str = "/api/v1/read";
 const READ_CERTIFIED_PATH: &str = "/api/v1/read_certified";
 const READ_MESSAGE_PATH: &str = "/api/v1/read_message";
+const SUBSCRIBE_PATH: &str = "/api/v1/subscribe";
 
 impl Client {
     pub async fn run_api(self, port: u16) -> std::io::Result<JoinHandle<()>> {
@@ -114,7 +115,7 @@ struct ReadMessageParams {
 #[tracing::instrument(skip(client, params))]
 async fn read_message(
     State(client): State<Arc<Client>>,
-    params: Query<ReadMessageParams>,
+    Query(params): Query<ReadMessageParams>,
 ) -> Result<Json<CertifiedReadMessageResponse>, StatusCode> {
     let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
     tracing::debug!("New read_message request for namespace: {namespace}");
@@ -124,4 +125,25 @@ async fn read_message(
         .await
         .map(Json)
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[tracing::instrument(skip(client, params))]
+async fn subscribe(
+    State(client): State<Arc<Client>>,
+    Query(params): Query<ReadMessageParams>,
+) -> Result<Json<()>, StatusCode> {
+    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
+    tracing::debug!("New subscribe request for namespace: {namespace}");
+
+    let record_stream = match client.subscribe(namespace).await {
+        Ok(stream) => stream,
+        Err(e) => {
+            error!(?e, "Failed to subscribe to namespace");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    // TODO: open SSE connection
+
+    Ok(Json(()))
 }

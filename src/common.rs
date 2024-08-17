@@ -1,5 +1,6 @@
 use std::{
     fmt,
+    net::SocketAddr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -44,6 +45,16 @@ impl Message {
 }
 
 #[derive(Debug, Error)]
+pub enum ClientError {
+    #[error("Write error: {0:?}")]
+    Write(#[from] WriteError),
+    #[error("Read error: {0:?}")]
+    Read(#[from] ReadError),
+    #[error("Subscription error: {0:?}")]
+    SubscriptionError(#[from] SubscriptionError),
+}
+
+#[derive(Debug, Error)]
 pub enum WriteError {
     #[error("Timed out")]
     Timeout,
@@ -59,6 +70,16 @@ pub enum ReadError {
     Timeout,
     #[error("No quorum reached, available: {available}, unavailable: {unavailable}")]
     NoQuorum { available: usize, unavailable: usize },
+}
+
+#[derive(Debug, Error)]
+pub enum SubscriptionError {
+    #[error("Timed out")]
+    Timeout,
+    #[error("Failed to connect to validator publisher socket")]
+    FailedToConnect,
+    #[error("Failed to subscribe to topic")]
+    FailedToSubscribe,
 }
 
 /// A type representing a UNIX millisecond timestamp
@@ -288,6 +309,14 @@ impl Record {
 
         hasher.finalize()
     }
+
+    pub fn message_digest(&self, namespace: &Namespace) -> B256 {
+        let mut hasher = Keccak256::new();
+        hasher.update(namespace);
+        hasher.update(&self.message.0);
+
+        hasher.finalize()
+    }
 }
 
 /// An ordered list of records.
@@ -320,4 +349,10 @@ impl ValidatorIdentity {
     pub fn new(index: usize, pubkey: BlsPublicKey) -> Self {
         ValidatorIdentity { index, pubkey }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscribeResponse {
+    pub addr: SocketAddr,
+    pub auth_token: Bytes,
 }

@@ -20,7 +20,7 @@ async fn test_write_request() -> eyre::Result<()> {
 
     let mut client = Client::new();
     let identity = ValidatorIdentity::new(0, pubkey);
-    client.connect(identity, validator_addr).await?;
+    client.connect_validator(identity, validator_addr).await?;
     info!("Client connected to validator");
 
     let namespace = Bytes::from_static(b"test").into();
@@ -44,7 +44,7 @@ async fn test_api_write_request() -> eyre::Result<()> {
 
     let mut client = Client::new();
     let identity = ValidatorIdentity::new(0, pubkey);
-    client.connect(identity, validator_addr).await?;
+    client.connect_validator(identity, validator_addr).await?;
     info!("Client connected to validator");
 
     client.run_api(8089).await?;
@@ -72,7 +72,7 @@ async fn test_read_request_single_validator() -> eyre::Result<()> {
 
     let mut client = Client::new();
     let identity = ValidatorIdentity::new(0, pubkey);
-    client.connect(identity, validator_addr).await?;
+    client.connect_validator(identity, validator_addr).await?;
     info!("Client connected to validator");
 
     let namespace: Namespace = Bytes::from_static(b"test").into();
@@ -109,9 +109,9 @@ async fn test_read_request_multiple_validators() -> eyre::Result<()> {
     info!("Validator 3 listening on: {}", validator_addr3);
 
     let mut client = Client::new();
-    client.connect(ValidatorIdentity::new(0, pubkey1), validator_addr1).await?;
-    client.connect(ValidatorIdentity::new(1, pubkey2), validator_addr2).await?;
-    client.connect(ValidatorIdentity::new(2, pubkey3), validator_addr3).await?;
+    client.connect_validator(ValidatorIdentity::new(0, pubkey1), validator_addr1).await?;
+    client.connect_validator(ValidatorIdentity::new(1, pubkey2), validator_addr2).await?;
+    client.connect_validator(ValidatorIdentity::new(2, pubkey3), validator_addr3).await?;
     info!("Client connected to validators");
 
     let namespace: Namespace = Bytes::from_static(b"test").into();
@@ -143,7 +143,7 @@ async fn test_read_unavailable_message() -> eyre::Result<()> {
     info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
-    client.connect(ValidatorIdentity::new(0, pubkey), validator_addr).await?;
+    client.connect_validator(ValidatorIdentity::new(0, pubkey), validator_addr).await?;
     info!("Client connected to validators");
 
     let namespace: Namespace = Bytes::from_static(b"test").into();
@@ -165,6 +165,7 @@ async fn spin_up_validator() -> eyre::Result<(SocketAddr, BlsPublicKey)> {
     let pubkey = dummy_sk.sk_to_pk();
     let validator = Validator::new_in_memory(dummy_sk, 0).await?;
     let validator_addr = validator.local_addr().expect("Listening");
-    tokio::spawn(async move { validator.run().await });
+    validator.run_forever();
+
     Ok((validator_addr, pubkey))
 }

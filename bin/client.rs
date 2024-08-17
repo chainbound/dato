@@ -59,7 +59,7 @@ async fn main() -> eyre::Result<()> {
 
     // Iterate over the validators and connect to each one
     for validator in registry.all_validators().await? {
-        client.connect(validator.identity(), validator.socket).await?;
+        client.connect_validator(validator.identity(), validator.socket).await?;
     }
 
     let handle = client.run_api(opts.api_port).await?;
