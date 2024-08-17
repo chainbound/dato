@@ -76,7 +76,7 @@ impl TryFrom<Validator> for ValidatorInfo {
             index: validator.index.to(),
             bls_pub_key: pubkey,
             stake: validator.stake.to(),
-            socket: SocketAddr::from_str(&validator.socket)?,
+            socket: validator.socket,
             exists: validator.exists,
         })
     }

@@ -24,7 +24,7 @@ pub struct ValidatorInfo {
     pub index: u64,
     pub bls_pub_key: BlsPublicKey,
     pub stake: u64,
-    pub socket: SocketAddr,
+    pub socket: String,
     pub exists: bool,
 }
 

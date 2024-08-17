@@ -43,6 +43,7 @@ impl CliOpts {
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    let _ = tracing_subscriber::fmt::try_init();
     let opts = CliOpts::parse();
 
     let registry: Box<dyn Registry> = if let Some(registry_path) = opts.registry_path {
@@ -61,7 +62,9 @@ async fn main() -> eyre::Result<()> {
         client.connect(validator.identity(), validator.socket).await?;
     }
 
-    client.run_api(opts.api_port).await?;
+    let handle = client.run_api(opts.api_port).await?;
+
+    handle.await?;
 
     Ok(())
 }
