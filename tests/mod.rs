@@ -1,13 +1,14 @@
 use std::{net::SocketAddr, time::Duration};
 
+use alloy::primitives::B256;
 use blst::min_pk::PublicKey as BlsPublicKey;
 use bytes::Bytes;
 use tokio::time::sleep;
 use tracing::info;
 
 use dato::{
-    bls::random_bls_secret, run_api, Client, ClientSpec, Message, Namespace, Timestamp, Validator,
-    ValidatorIdentity,
+    bls::random_bls_secret, run_api, CertifiedReadMessageResponse, CertifiedUnavailableMessage,
+    Client, ClientSpec, Message, Namespace, Timestamp, Validator, ValidatorIdentity,
 };
 
 #[tokio::test]
@@ -29,7 +30,7 @@ async fn test_write_request() -> eyre::Result<()> {
     info!(?record, "Wrote record");
 
     assert_eq!(record.timestamps.len(), 1);
-    assert_eq!(record.message, Some(message));
+    assert_eq!(record.message, message);
 
     Ok(())
 }
@@ -130,6 +131,39 @@ async fn test_read_request_multiple_validators() -> eyre::Result<()> {
     info!(?log, "Read log");
 
     assert_eq!(log.records.len(), 3);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_read_unavailable_message() -> eyre::Result<()> {
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let (validator_addr1, pubkey1) = spin_up_validator().await?;
+    info!("Validator 1 listening on: {}", validator_addr1);
+
+    let (validator_addr2, pubkey2) = spin_up_validator().await?;
+    info!("Validator 2 listening on: {}", validator_addr2);
+
+    let (validator_addr3, pubkey3) = spin_up_validator().await?;
+    info!("Validator 3 listening on: {}", validator_addr3);
+
+    let mut client = Client::new();
+    client.connect(ValidatorIdentity::new(0, pubkey1), validator_addr1).await?;
+    client.connect(ValidatorIdentity::new(1, pubkey2), validator_addr2).await?;
+    client.connect(ValidatorIdentity::new(2, pubkey3), validator_addr3).await?;
+    info!("Client connected to validators");
+
+    let namespace: Namespace = Bytes::from_static(b"test").into();
+    let msg_id = B256::ZERO;
+
+    let log = client.read_message(namespace, msg_id).await?;
+    info!(?log, "Read log");
+
+    match log {
+        CertifiedReadMessageResponse::Unavailable(CertifiedUnavailableMessage { .. }) => {}
+        _ => eyre::bail!("Expected UnavailableMessage"),
+    }
 
     Ok(())
 }

@@ -2,7 +2,8 @@
 
 mod common;
 pub use common::{
-    CertifiedLog, CertifiedRecord, Log, Message, Namespace, ReadError, Record, Timestamp,
+    CertifiedLog, CertifiedReadMessageResponse, CertifiedRecord, CertifiedUnavailableMessage, Log,
+    Message, Namespace, ReadError, ReadMessageResponse, Record, Timestamp, UnavailableMessage,
     WriteError,
 };
 
@@ -17,5 +18,5 @@ pub use common::ValidatorIdentity;
 mod validator;
 pub use validator::{Validator, ValidatorSpec};
 
-mod bindings;
-pub use bindings::ValidatorRegistry;
+mod registry;
+pub use registry::{contract, filesystem, Registry};

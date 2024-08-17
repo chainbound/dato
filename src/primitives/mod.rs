@@ -1,4 +1,4 @@
-use alloy::primitives::Bytes;
+use alloy::primitives::{Bytes, B256};
 use serde::{Deserialize, Serialize};
 
 use crate::common::{Message, Namespace, Timestamp};
@@ -10,7 +10,7 @@ pub mod bls;
 pub enum Request {
     Write { namespace: Namespace, message: Message }, // expects a `Record` response
     Read { namespace: Namespace, start: Timestamp, end: Timestamp }, // expects a `Log` response
-    ReadMessage { namespace: Namespace, message: Message }, // expects a `Log` response
+    ReadMessage { namespace: Namespace, msg_id: B256 }, // expects a `Log` response
 }
 
 impl Request {

@@ -38,13 +38,15 @@ async fn main() -> eyre::Result<()> {
 
     match opts.cmd {
         SubCommand::Run(run_opts) => {
-            let sk = BlsSecretKey::from_bytes(&hex::decode(run_opts.secret_key)?)
+            let sk = BlsSecretKey::from_bytes(&alloy::hex::decode(run_opts.secret_key)?)
                 .map_err(|e| eyre::eyre!("Invalid secret key: {:?}", e))?;
 
             Validator::new_in_memory(sk, run_opts.port).await?.run().await;
         }
         SubCommand::Register(register_opts) => {
             println!("Registering with pubkey: {}", register_opts.pubkey);
+
+            // TODO: registration logic
         }
     }
 

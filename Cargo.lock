@@ -1341,6 +1341,7 @@ dependencies = [
  "eyre",
  "futures",
  "hashbrown",
+ "hashmore",
  "hex",
  "msg",
  "rand",
@@ -1814,6 +1815,14 @@ checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
  "ahash",
  "allocator-api2",
+]
+
+[[package]]
+name = "hashmore"
+version = "0.1.0"
+source = "git+https://github.com/merklefruit/hashmore#24f79073e69dbd6d7c3b8260f492b57eb4a8b2c1"
+dependencies = [
+ "hashbrown",
 ]
 
 [[package]]

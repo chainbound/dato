@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use alloy::primitives::Bytes;
+use alloy::primitives::{Bytes, B256};
 use async_trait::async_trait;
 use blst::min_pk::{AggregateSignature, PublicKey};
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -13,7 +13,8 @@ use tracing::{debug, info, instrument, trace, warn};
 
 use crate::{
     common::{
-        CertifiedLog, CertifiedRecord, Log, Message, ReadError, Record, Timestamp,
+        CertifiedLog, CertifiedReadMessageResponse, CertifiedRecord, CertifiedUnavailableMessage,
+        Log, Message, ReadError, ReadMessageResponse, Record, Timestamp, UnavailableMessage,
         ValidatorIdentity, WriteError,
     },
     primitives::{bls::verify_signature, Request},
@@ -84,11 +85,11 @@ impl ClientSpec for Client {
                 match tokio::time::timeout(WRITE_TIMEOUT, socket.request(cloned_req.into())).await {
                     Ok(Ok(response)) => Some((*index, response)),
                     Ok(Err(e)) => {
-                        tracing::warn!(error = %e, "Error writing to validator {}", *index);
+                        warn!(error = %e, "Error writing to validator {}", *index);
                         None
                     }
                     Err(e) => {
-                        tracing::warn!(error = %e, "Timed out writing to validator {}", *index);
+                        warn!(error = %e, "Timed out writing to validator {}", *index);
                         None
                     }
                 }
@@ -151,7 +152,7 @@ impl ClientSpec for Client {
 
         let mut certified_record = CertifiedRecord {
             timestamps,
-            message: Some(message),
+            message,
             quorum_signature: quorum_signature.expect("Quorum passed"),
         };
 
@@ -280,12 +281,12 @@ impl ClientSpec for Client {
     async fn read_message(
         &self,
         namespace: Namespace,
-        msg_id: Bytes,
-    ) -> Result<CertifiedRecord, ReadError> {
+        msg_id: B256,
+    ) -> Result<CertifiedReadMessageResponse, ReadError> {
         let start_ts = Instant::now();
         let mut responses = FuturesUnordered::new();
 
-        let request = Request::ReadMessage { namespace: namespace.clone(), message: msg_id.into() };
+        let request = Request::ReadMessage { namespace: namespace.clone(), msg_id };
         let serialized_req = request.serialize();
 
         for (index, socket) in &self.validator_sockets {
@@ -306,7 +307,125 @@ impl ClientSpec for Client {
             });
         }
 
-        todo!()
+        let mut available_timestamps = Vec::with_capacity(self.validators.len());
+        let mut unavailable_timestamps = Vec::with_capacity(self.validators.len());
+
+        let mut available_quorum_signature: Option<AggregateSignature> = None;
+        let mut unavailable_quorum_signature: Option<AggregateSignature> = None;
+
+        let mut available_votes = 0;
+        let mut unavailable_votes = 0;
+
+        let mut message: Message = Default::default();
+
+        // Iterate over the responses until we have a quorum of valid responses OR we run out of
+        // valid responses.
+        while let Some(Some((index, bytes))) = responses.next().await {
+            trace!("Received response from validator {index}: {bytes:?}");
+
+            let response = match serde_json::from_slice::<ReadMessageResponse>(&bytes) {
+                Ok(response) => response,
+                Err(err) => {
+                    warn!(error = ?err, "Error deserializing response from validator {index}");
+                    continue;
+                }
+            };
+
+            match response {
+                ReadMessageResponse::Available(record) => {
+                    // Verify message integrity
+                    if record.message.digest(&namespace) != msg_id {
+                        warn!("Message mismatch from validator {:?}", index);
+                        continue;
+                    }
+
+                    message = record.message.clone();
+                    let pubkey = self.validators.get(&index).expect("Validator not found");
+
+                    let digest = record.digest(&namespace);
+
+                    if !verify_signature(&record.signature, pubkey, digest) {
+                        warn!(?pubkey, "Invalid signature from validator {index}");
+                        continue;
+                    }
+
+                    trace!("Validated response from validator {index}");
+
+                    if let Some(q) = available_quorum_signature.as_mut() {
+                        q.add_signature(&record.signature, false).unwrap();
+                    } else {
+                        available_quorum_signature =
+                            Some(AggregateSignature::from_signature(&record.signature));
+                    }
+
+                    available_votes += 1;
+                    available_timestamps.insert(index, record.timestamp);
+                }
+                ReadMessageResponse::Unavailable(unavailable) => {
+                    let pubkey = self.validators.get(&index).expect("Validator not found");
+                    let digest = unavailable.digest();
+
+                    if !verify_signature(&unavailable.signature, pubkey, digest) {
+                        warn!(?pubkey, "Invalid signature from validator {index}");
+                        continue;
+                    }
+
+                    trace!("Validated unavailable response from validator {index}");
+
+                    if let Some(q) = unavailable_quorum_signature.as_mut() {
+                        q.add_signature(&unavailable.signature, false).unwrap();
+                    } else {
+                        unavailable_quorum_signature =
+                            Some(AggregateSignature::from_signature(&unavailable.signature));
+                    }
+
+                    unavailable_votes += 1;
+                    unavailable_timestamps.insert(index, unavailable.timestamp);
+                }
+            }
+
+            if self.quorum_reached(available_votes) ||
+                self.quorum_reached(unavailable_votes) ||
+                available_votes + unavailable_votes >= self.validators.len()
+            {
+                break;
+            }
+        }
+
+        trace!(
+            available_votes,
+            unavailable_votes,
+            validators = self.validators.len(),
+            "Quorum check"
+        );
+
+        if self.quorum_reached(available_votes) {
+            let mut certified_record = CertifiedRecord {
+                timestamps: available_timestamps,
+                message,
+                quorum_signature: available_quorum_signature.expect("Quorum passed"),
+            };
+
+            let timestamp: u128 = certified_record.certified_timestamp().into();
+
+            debug!(elapsed = ?start_ts.elapsed(), median_timestamp = timestamp, "Quorum reached");
+
+            Ok(CertifiedReadMessageResponse::Available(certified_record))
+        } else if self.quorum_reached(unavailable_votes) {
+            let mut certified_unavailable_message = CertifiedUnavailableMessage {
+                timestamps: unavailable_timestamps,
+                msg_id,
+                quorum_signature: unavailable_quorum_signature.expect("Quorum passed"),
+            };
+
+            let timestamp: u128 = certified_unavailable_message.certified_timestamp().into();
+
+            debug!(elapsed = ?start_ts.elapsed(), median_timestamp = timestamp, "Quorum reached");
+
+            Ok(CertifiedReadMessageResponse::Unavailable(certified_unavailable_message))
+        } else {
+            Err(ReadError::NoQuorum { available: available_votes, unavailable: unavailable_votes })
+        }
     }
 }
 

@@ -1,8 +1,9 @@
-use alloy::primitives::Bytes;
+use alloy::primitives::{Bytes, B256};
 use async_trait::async_trait;
 
 use crate::{
-    CertifiedLog, CertifiedRecord, Log, Message, Namespace, ReadError, Timestamp, WriteError,
+    common::CertifiedReadMessageResponse, CertifiedLog, CertifiedRecord, Log, Message, Namespace,
+    ReadError, ReadMessageResponse, Timestamp, WriteError,
 };
 
 #[async_trait]
@@ -35,6 +36,6 @@ pub trait ClientSpec {
     async fn read_message(
         &self,
         namespace: Namespace,
-        msg_id: Bytes,
-    ) -> Result<CertifiedRecord, ReadError>;
+        msg_id: B256,
+    ) -> Result<CertifiedReadMessageResponse, ReadError>;
 }

@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, time::Duration};
 
-use blst::min_pk::SecretKey as BlsSecretKey;
+use alloy::primitives::B256;
+use blst::min_pk::{SecretKey as BlsSecretKey, Signature};
 use bytes::Bytes;
 use futures::StreamExt;
 use msg::{tcp::Tcp, PubError, RepSocket, Request as MsgRequest};
@@ -10,15 +11,13 @@ use tracing::{debug, error};
 mod store;
 pub use store::{DataStore, InMemoryStore};
 
+mod spec;
+pub use spec::ValidatorSpec;
+
 use crate::{
-    common::{Log, Message, Namespace, Record, Timestamp},
+    common::{Log, Message, Namespace, ReadMessageResponse, Record, Timestamp, UnavailableMessage},
     primitives::{bls::sign_with_prefix, Request},
 };
-
-pub trait ValidatorSpec {
-    fn write(&mut self, namespace: Namespace, message: Message) -> Record;
-    fn read(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log;
-}
 
 pub struct Validator<DS: DataStore> {
     store: DS,
@@ -37,7 +36,9 @@ impl<DS: DataStore + Send + Sync> ValidatorSpec for Validator<DS> {
     fn write(&mut self, namespace: Namespace, message: Message) -> Record {
         let timestamp = Timestamp::now();
 
-        let message_digest = message.digest(timestamp, &namespace);
+        let message_digest = message.digest(&namespace);
+        let record_digest = message.record_digest(&namespace, timestamp);
+
         let signature = sign_with_prefix(&self.secret_key, message_digest);
         let record = Record { message, timestamp, signature };
         self.store.write_one(namespace, record.clone());
@@ -47,6 +48,17 @@ impl<DS: DataStore + Send + Sync> ValidatorSpec for Validator<DS> {
 
     fn read(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log {
         self.store.read_range(namespace, start, end)
+    }
+
+    fn read_message(&self, namespace: Namespace, msg_id: B256) -> ReadMessageResponse {
+        let record = self.store.read_message(namespace, msg_id);
+
+        if let Some(record) = record {
+            ReadMessageResponse::Available(record)
+        } else {
+            let unavailable = UnavailableMessage::create_signed(msg_id, &self.secret_key);
+            ReadMessageResponse::Unavailable(unavailable)
+        }
     }
 }
 
@@ -108,8 +120,17 @@ impl<DS: DataStore + Send + Sync> Validator<DS> {
                     error!(?err, "Failed to respond to request");
                 }
             }
-            Request::ReadMessage { namespace, message } => {
-                // TODO
+            Request::ReadMessage { namespace, msg_id } => {
+                debug!(?namespace, "Received read message request");
+                let signature = self.read_message(namespace, msg_id);
+                let Ok(response) = serde_json::to_vec(&signature).map(Bytes::from) else {
+                    error!("Failed to serialize signature");
+                    return;
+                };
+
+                if let Err(err) = req.respond(response) {
+                    error!(?err, "Failed to respond to request");
+                }
             }
         }
     }

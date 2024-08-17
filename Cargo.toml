@@ -20,6 +20,7 @@ serde = "1"
 bytes = "1.7.1"
 hex = "0.4.3"
 hashbrown = "0.14.5"
+hashmore = { git = "https://github.com/merklefruit/hashmore" }
 
 # crypto
 blst = { version = "0.3.12", features = ["serde"] }
@@ -49,3 +50,7 @@ path = "bin/client.rs"
 [[bin]]
 name = "validator"
 path = "bin/validator.rs"
+
+[[bin]]
+name = "gen_keys"
+path = "bin/gen_keys.rs"

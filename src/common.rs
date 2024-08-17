@@ -1,15 +1,20 @@
-use alloy::{
-    hex::{decode_to_slice, encode_prefixed},
-    primitives::{Bytes, Keccak256, B256},
-};
-use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use blst::min_pk::{AggregateSignature, Signature as BlsSignature};
+use alloy::{
+    hex::{decode_to_slice, encode_prefixed},
+    primitives::{Bytes, Keccak256, B256},
+};
+use blst::min_pk::{
+    AggregateSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
+    Signature as BlsSignature,
+};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::bls::sign_with_prefix;
 
 /// A namespace for a log record.
 pub type Namespace = Bytes;
@@ -19,7 +24,16 @@ pub type Namespace = Bytes;
 pub struct Message(pub Bytes);
 
 impl Message {
-    pub fn digest(&self, timestamp: Timestamp, namespace: &Namespace) -> B256 {
+    /// Returns the digest of the message and the namespace.
+    pub fn digest(&self, namespace: &Namespace) -> B256 {
+        let mut hasher = Keccak256::new();
+        hasher.update(namespace);
+        hasher.update(&self.0);
+
+        hasher.finalize()
+    }
+
+    pub fn record_digest(&self, namespace: &Namespace, timestamp: Timestamp) -> B256 {
         let mut hasher = Keccak256::new();
         hasher.update(namespace);
         hasher.update(timestamp.0.to_le_bytes());
@@ -43,6 +57,8 @@ pub enum WriteError {
 pub enum ReadError {
     #[error("Timed out")]
     Timeout,
+    #[error("No quorum reached, available: {available}, unavailable: {unavailable}")]
+    NoQuorum { available: usize, unavailable: usize },
 }
 
 /// A type representing a UNIX millisecond timestamp
@@ -69,6 +85,12 @@ impl From<Timestamp> for u128 {
     }
 }
 
+impl From<u64> for Timestamp {
+    fn from(value: u64) -> Self {
+        Timestamp(value as u128)
+    }
+}
+
 impl fmt::Display for Timestamp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -92,13 +114,13 @@ impl std::ops::Div<u128> for Timestamp {
 }
 
 /// A certified record of a message at a particular time. Contains
-/// the quorum signature for the message. The message may be `None` if if does not exist.
+/// the quorum signature for the message.
 /// The signature is over the msg_id, message, and timestamp.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CertifiedRecord {
     /// An indexed array of timestamps. The index is the validator ID.
     pub timestamps: Vec<Timestamp>,
-    pub message: Option<Message>,
+    pub message: Message,
     #[serde(with = "serde_bls_aggregate")]
     pub quorum_signature: AggregateSignature,
 }
@@ -121,6 +143,75 @@ pub struct CertifiedLog {
     pub records: Vec<CertifiedRecord>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[allow(clippy::large_enum_variant)]
+pub enum CertifiedReadMessageResponse {
+    Available(CertifiedRecord),
+    Unavailable(CertifiedUnavailableMessage),
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ReadMessageResponse {
+    Available(Record),
+    Unavailable(UnavailableMessage),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CertifiedUnavailableMessage {
+    pub timestamps: Vec<Timestamp>,
+    pub msg_id: B256,
+    #[serde(with = "serde_bls_aggregate")]
+    pub quorum_signature: AggregateSignature,
+}
+
+impl CertifiedUnavailableMessage {
+    /// Returns the median of all the timestamps in the array.
+    pub fn certified_timestamp(&mut self) -> Timestamp {
+        self.timestamps.sort();
+        if self.timestamps.len() % 2 == 0 {
+            let mid = self.timestamps.len() / 2;
+            (self.timestamps[mid - 1] + self.timestamps[mid]) / 2
+        } else {
+            self.timestamps[self.timestamps.len() / 2]
+        }
+    }
+}
+
+/// An unavailable message response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnavailableMessage {
+    pub timestamp: Timestamp,
+    pub msg_id: B256,
+    #[serde(with = "serde_bls")]
+    pub signature: BlsSignature,
+}
+
+impl UnavailableMessage {
+    /// Create a signed certificate for an unavailable message, by signing over its
+    /// message ID and timestamp with the given secret key.
+    pub fn create_signed(msg_id: B256, secret_key: &BlsSecretKey) -> Self {
+        let timestamp = Timestamp::now();
+        let digest = {
+            let mut hasher = Keccak256::new();
+            hasher.update(msg_id);
+            hasher.update(timestamp.0.to_le_bytes());
+            hasher.finalize()
+        };
+
+        let signature = sign_with_prefix(secret_key, digest);
+
+        UnavailableMessage { timestamp, msg_id, signature }
+    }
+
+    pub fn digest(&self) -> B256 {
+        let mut hasher = Keccak256::new();
+        hasher.update(self.msg_id);
+        hasher.update(self.timestamp.0.to_le_bytes());
+        hasher.finalize()
+    }
+}
+
 /// A record of a message at a particular time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
@@ -130,7 +221,6 @@ pub struct Record {
     pub signature: BlsSignature,
 }
 
-// serde bytes
 mod serde_bls_aggregate {
     use blst::min_pk::{AggregateSignature, Signature as BlsSignature};
     use serde::{Deserialize, Deserializer, Serializer};
@@ -161,7 +251,6 @@ mod serde_bls_aggregate {
     }
 }
 
-// serde bytes
 mod serde_bls {
     use blst::min_pk::Signature as BlsSignature;
     use serde::{Deserialize, Deserializer, Serializer};
@@ -200,6 +289,7 @@ impl Record {
         hasher.finalize()
     }
 }
+
 /// An ordered list of records.
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Log {
@@ -223,11 +313,11 @@ impl Log {
 #[derive(Debug, Clone)]
 pub struct ValidatorIdentity {
     pub index: usize,
-    pub pubkey: blst::min_pk::PublicKey,
+    pub pubkey: BlsPublicKey,
 }
 
 impl ValidatorIdentity {
-    pub fn new(index: usize, pubkey: blst::min_pk::PublicKey) -> Self {
+    pub fn new(index: usize, pubkey: BlsPublicKey) -> Self {
         ValidatorIdentity { index, pubkey }
     }
 }
