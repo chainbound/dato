@@ -5,7 +5,6 @@ use blst::min_pk::{SecretKey as BlsSecretKey, Signature};
 use bytes::Bytes;
 use futures::StreamExt;
 use msg::{tcp::Tcp, PubError, RepSocket, Request as MsgRequest};
-use tokio::time::sleep;
 use tracing::{debug, error};
 
 mod store;
@@ -69,16 +68,13 @@ impl<DS: DataStore + Send + Sync> Validator<DS> {
         Ok(Self { store, secret_key, conn, local_addr })
     }
 
-    pub async fn run(&mut self) {
-        loop {
-            while let Some(req) = self.conn.next().await {
-                debug!("Received request");
-                self.handle_request(req);
-            }
-
-            error!("Validator connection unexpectedly closed");
-            sleep(Duration::from_millis(1000)).await;
+    pub async fn run(mut self) {
+        while let Some(req) = self.conn.next().await {
+            debug!("Received request");
+            self.handle_request(req);
         }
+
+        error!("Validator connection unexpectedly closed");
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {

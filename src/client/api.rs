@@ -9,6 +9,8 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinHandle;
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     primitives::Request, CertifiedLog, CertifiedReadMessageResponse, CertifiedRecord, Log,
@@ -22,45 +24,44 @@ const READ_PATH: &str = "/api/v1/read";
 const READ_CERTIFIED_PATH: &str = "/api/v1/read_certified";
 const READ_MESSAGE_PATH: &str = "/api/v1/read_message";
 
-pub async fn run_api(client: Client, port: u16) -> eyre::Result<()> {
-    let router: Router = Router::new()
-        .route(WRITE_PATH, post(write))
-        .route(READ_PATH, get(read))
-        .route(READ_CERTIFIED_PATH, get(read_certified))
-        .route(READ_MESSAGE_PATH, get(read_message))
-        .with_state(Arc::new(client));
+impl Client {
+    pub async fn run_api(self, port: u16) -> std::io::Result<JoinHandle<()>> {
+        let router: Router = Router::new()
+            .route(WRITE_PATH, post(write))
+            .route(READ_PATH, get(read))
+            .route(READ_CERTIFIED_PATH, get(read_certified))
+            .route(READ_MESSAGE_PATH, get(read_message))
+            .with_state(Arc::new(self));
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+        let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
-    let addr = listener.local_addr().expect("Failed to get local address");
+        let addr = listener.local_addr().expect("Failed to get local address");
 
-    tracing::info!("API server running on {addr}");
+        info!("API server running on {addr}");
 
-    tokio::spawn(async move {
-        if let Err(err) = axum::serve(listener, router).await {
-            tracing::error!(?err, "Commitments API Server error");
-        }
-    });
-
-    Ok(())
+        Ok(tokio::spawn(async move {
+            if let Err(err) = axum::serve(listener, router).await {
+                error!(?err, "API Server error");
+            }
+        }))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WriteRequest {
-    namespace: String,
+    namespace: Bytes,
     message: Bytes,
 }
 
-#[tracing::instrument(skip(client, request))]
+#[instrument(skip(client, request))]
 async fn write(
     State(client): State<Arc<Client>>,
     Json(request): Json<WriteRequest>,
 ) -> Result<Json<CertifiedRecord>, StatusCode> {
-    let namespace = Bytes::from(request.namespace.as_bytes().to_owned());
-    tracing::debug!("New write request for namespace: {namespace}");
+    debug!(namespace = %request.namespace, "New write request");
 
     client
-        .write(namespace, request.message.into())
+        .write(request.namespace, request.message.into())
         .await
         .map(Json)
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
@@ -68,36 +69,34 @@ async fn write(
 
 #[derive(Debug, Deserialize)]
 struct ReadParams {
-    namespace: String,
+    namespace: Bytes,
     start: u64,
     end: u64,
 }
 
-#[tracing::instrument(skip(client, params))]
+#[instrument(skip(client, params))]
 async fn read(
     State(client): State<Arc<Client>>,
-    params: Query<ReadParams>,
+    Query(params): Query<ReadParams>,
 ) -> Result<Json<Log>, StatusCode> {
-    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
-    tracing::debug!("New read request for namespace: {namespace}");
+    debug!(namespace = %params.namespace, "New read request");
 
     client
-        .read(namespace, params.start.into(), params.end.into())
+        .read(params.namespace, params.start.into(), params.end.into())
         .await
         .map(Json)
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-#[tracing::instrument(skip(client, params))]
+#[instrument(skip(client, params))]
 async fn read_certified(
     State(client): State<Arc<Client>>,
-    params: Query<ReadParams>,
+    Query(params): Query<ReadParams>,
 ) -> Result<Json<CertifiedLog>, StatusCode> {
-    let namespace = Bytes::from(params.namespace.as_bytes().to_owned());
-    tracing::debug!("New read_certified request for namespace: {namespace}");
+    debug!(namespace = %params.namespace, "New read_certified request");
 
     client
-        .read_certified(namespace, params.start.into(), params.end.into())
+        .read_certified(params.namespace, params.start.into(), params.end.into())
         .await
         .map(Json)
         .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)

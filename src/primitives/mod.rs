@@ -8,9 +8,15 @@ pub mod bls;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Request {
-    Write { namespace: Namespace, message: Message }, // expects a `Record` response
-    Read { namespace: Namespace, start: Timestamp, end: Timestamp }, // expects a `Log` response
-    ReadMessage { namespace: Namespace, msg_id: B256 }, // expects a `Log` response
+    /// Request to write a message to the log.
+    /// Expects a [`crate::Record`] response
+    Write { namespace: Namespace, message: Message },
+    /// Request to read a range of messages from the log.
+    /// Expects a [`crate::Log`] response
+    Read { namespace: Namespace, start: Timestamp, end: Timestamp },
+    /// Request to read a single message from the log.
+    /// Expects a [`crate::Log`] response
+    ReadMessage { namespace: Namespace, msg_id: B256 },
 }
 
 impl Request {

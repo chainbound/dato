@@ -10,14 +10,21 @@ use crate::{
     Message,
 };
 
+/// A data store interface for reading and writing log records.
 pub trait DataStore {
+    /// Reads a range of log records from the store within the given timestamps.
     fn read_range(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log;
+
+    /// Reads a single log record from the store by its message ID.
     fn read_message(&self, namespace: Namespace, msg_id: B256) -> Option<Record>;
+
+    /// Writes a single log record to the store.
     fn write_one(&mut self, namespace: Namespace, record: Record);
 }
 
 /// An in-memory backend for the data store.
 pub struct InMemoryStore {
+    /// The maximum number of records to store per namespace.
     cap: usize,
     /// A map from namespace to a FIFO map of records. The FIFO map is used to
     /// evict old records when the capacity is reached for each namespace.
@@ -25,6 +32,7 @@ pub struct InMemoryStore {
 }
 
 impl InMemoryStore {
+    /// Creates a new in-memory store with the given capacity.
     pub fn with_capacity(cap: usize) -> Self {
         Self { cap, record_maps: HashMap::with_capacity(cap) }
     }

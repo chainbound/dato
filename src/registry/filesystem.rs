@@ -5,8 +5,9 @@ use std::{
     path::PathBuf,
 };
 
-use super::{Registry, ValidatorInfo};
 use blst::min_pk::PublicKey as BlsPublicKey;
+
+use super::{Registry, ValidatorInfo};
 
 /// A validator registry that reads from the filesystem and caches the results.
 pub struct ValidatorRegistry {

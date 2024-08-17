@@ -2,14 +2,14 @@ use std::path::PathBuf;
 
 use alloy::primitives::Address;
 use clap::Parser;
+use eyre::{bail, eyre};
 use url::Url;
 
-use dato::{contract, filesystem, run_api, Client, Registry};
+use dato::{contract, filesystem, Client, Registry};
 
 #[derive(Debug, Parser)]
 struct CliOpts {
     #[clap(
-        short,
         long,
         env = "DATO_EL_URL",
         conflicts_with = "registry_path",
@@ -17,21 +17,20 @@ struct CliOpts {
     )]
     pub execution_client_url: Option<Url>,
     #[clap(
-        short,
         long,
         env = "DATO_REGISTRY_ADDRESS",
         conflicts_with = "registry_path",
         requires = "execution_client_url"
     )]
     pub registry_address: Option<Address>,
-    #[clap(short, long, env = "DATO_REGISTRY_PATH", conflicts_with = "registry_address")]
+    #[clap(long, env = "DATO_REGISTRY_PATH", conflicts_with = "registry_address")]
     pub registry_path: Option<PathBuf>,
-    #[clap(short, long, env = "DATO_API_PORT", default_value = "12440")]
+    #[clap(long, env = "DATO_API_PORT", default_value = "12440")]
     pub api_port: u16,
 }
 
 impl CliOpts {
-    #[allow(dead_code)]
+    #[allow(unused)]
     pub async fn test() -> eyre::Result<Self> {
         Ok(Self {
             execution_client_url: None,
@@ -46,27 +45,23 @@ impl CliOpts {
 async fn main() -> eyre::Result<()> {
     let opts = CliOpts::parse();
 
-    let validators = if let Some(registry_path) = opts.registry_path {
-        let registry = filesystem::ValidatorRegistry::read_from_file(registry_path)?;
-        registry.all_validators().await?
+    let registry: Box<dyn Registry> = if let Some(registry_path) = opts.registry_path {
+        Box::new(filesystem::ValidatorRegistry::read_from_file(registry_path)?)
     } else if let Some(registry_addr) = opts.registry_address {
-        let el_url = opts
-            .execution_client_url
-            .ok_or_else(|| eyre::eyre!("Execution client URL must be provided"))?;
-        let registry = contract::ValidatorRegistry::new(el_url, registry_addr);
-        registry.all_validators().await?
+        let el_url = opts.execution_client_url.ok_or(eyre!("Missing Execution client URL"))?;
+        Box::new(contract::ValidatorRegistry::new(el_url, registry_addr))
     } else {
-        eyre::bail!("Either registry_path or registry_address must be provided")
+        bail!("Either 'registry_path' or 'registry_address' must be provided as a CLI argument");
     };
 
     let mut client = Client::new();
 
     // Iterate over the validators and connect to each one
-    for validator in validators {
+    for validator in registry.all_validators().await? {
         client.connect(validator.identity(), validator.socket).await?;
     }
 
-    run_api(client, opts.api_port).await?;
+    client.run_api(opts.api_port).await?;
 
     Ok(())
 }

@@ -7,8 +7,8 @@ use tokio::time::sleep;
 use tracing::info;
 
 use dato::{
-    bls::random_bls_secret, run_api, CertifiedReadMessageResponse, CertifiedUnavailableMessage,
-    Client, ClientSpec, Message, Namespace, Timestamp, Validator, ValidatorIdentity,
+    bls::random_bls_secret, CertifiedReadMessageResponse, CertifiedUnavailableMessage, Client,
+    ClientSpec, Message, Namespace, Timestamp, Validator, ValidatorIdentity,
 };
 
 #[tokio::test]
@@ -47,7 +47,7 @@ async fn test_api_write_request() -> eyre::Result<()> {
     client.connect(identity, validator_addr).await?;
     info!("Client connected to validator");
 
-    run_api(client, 8089).await?;
+    client.run_api(8089).await?;
 
     tokio::time::sleep(Duration::from_secs(6000)).await;
 
@@ -163,7 +163,7 @@ async fn test_read_unavailable_message() -> eyre::Result<()> {
 async fn spin_up_validator() -> eyre::Result<(SocketAddr, BlsPublicKey)> {
     let dummy_sk = random_bls_secret();
     let pubkey = dummy_sk.sk_to_pk();
-    let mut validator = Validator::new_in_memory(dummy_sk, 0).await?;
+    let validator = Validator::new_in_memory(dummy_sk, 0).await?;
     let validator_addr = validator.local_addr().expect("Listening");
     tokio::spawn(async move { validator.run().await });
     Ok((validator_addr, pubkey))
