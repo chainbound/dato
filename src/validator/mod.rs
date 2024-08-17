@@ -36,10 +36,9 @@ impl<DS: DataStore + Send + Sync> ValidatorSpec for Validator<DS> {
     fn write(&mut self, namespace: Namespace, message: Message) -> Record {
         let timestamp = Timestamp::now();
 
-        let message_digest = message.digest(&namespace);
         let record_digest = message.record_digest(&namespace, timestamp);
 
-        let signature = sign_with_prefix(&self.secret_key, message_digest);
+        let signature = sign_with_prefix(&self.secret_key, record_digest);
         let record = Record { message, timestamp, signature };
         self.store.write_one(namespace, record.clone());
 
