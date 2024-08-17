@@ -7,7 +7,6 @@ latency_limit="400"
 
 build=false
 
-trap cleanup EXIT
 
 function usage() {
     echo "Usage: $0 -p <port> -r <registry_path> -l <latency_limit>"
@@ -36,6 +35,7 @@ while getopts "p:r:l:bh" opt; do
     esac
 done
 
+
 # Output the input options for verification
 echo "Client Port: $client_port"
 echo "Registry location: $registry_path"
@@ -48,6 +48,8 @@ if [ "$build" = true ]; then
     
     exit 0
 fi
+
+trap cleanup EXIT
 
 echo "Creating dato-net network"
 docker network create -d bridge dato-net || true
