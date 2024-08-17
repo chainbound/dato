@@ -1,9 +1,11 @@
 use alloy::primitives::{Bytes, B256};
 use async_trait::async_trait;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
-    common::CertifiedReadMessageResponse, CertifiedLog, CertifiedRecord, Log, Message, Namespace,
-    ReadError, ReadMessageResponse, Timestamp, WriteError,
+    common::{CertifiedReadMessageResponse, ClientError},
+    CertifiedLog, CertifiedRecord, Log, Message, Namespace, ReadError, ReadMessageResponse, Record,
+    Timestamp, WriteError,
 };
 
 #[async_trait]
@@ -14,7 +16,7 @@ pub trait ClientSpec {
         &self,
         namespace: Namespace,
         message: Message,
-    ) -> Result<CertifiedRecord, WriteError>;
+    ) -> Result<CertifiedRecord, ClientError>;
 
     /// Get the certified log for the given namespace and time range.
     async fn read_certified(
@@ -22,7 +24,7 @@ pub trait ClientSpec {
         namespace: Namespace,
         start: Timestamp,
         end: Timestamp,
-    ) -> Result<CertifiedLog, ReadError>;
+    ) -> Result<CertifiedLog, ClientError>;
 
     /// Get the uncertified log for the given namespace and time range.
     async fn read(
@@ -30,12 +32,21 @@ pub trait ClientSpec {
         namespace: Namespace,
         start: Timestamp,
         end: Timestamp,
-    ) -> Result<Log, ReadError>;
+    ) -> Result<Log, ClientError>;
 
     /// Attempt to read the message specified by the given namespace and message ID.
     async fn read_message(
         &self,
         namespace: Namespace,
         msg_id: B256,
-    ) -> Result<CertifiedReadMessageResponse, ReadError>;
+    ) -> Result<CertifiedReadMessageResponse, ClientError>;
+
+    /// Subscribe to all messages in the given namespace.
+    async fn subscribe(&self, namespace: Namespace) -> Result<ReceiverStream<Record>, ClientError>;
+
+    /// Subscribe to all certified records in the given namespace.
+    async fn subscribe_certified(
+        &self,
+        namespace: Namespace,
+    ) -> Result<ReceiverStream<CertifiedRecord>, ClientError>;
 }

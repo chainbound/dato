@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// A data store interface for reading and writing log records.
-pub trait DataStore {
+pub trait DataStore: Send + Sync + Unpin {
     /// Reads a range of log records from the store within the given timestamps.
     fn read_range(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log;
 
@@ -62,13 +62,15 @@ impl DataStore for InMemoryStore {
     }
 
     fn write_one(&mut self, namespace: Namespace, record: Record) {
-        let record_digest = record.digest(&namespace);
+        // We need to deduplicate messages in the store by their message digest,
+        // which doesn't contain the committed timestamp.
+        let message_digest = record.message_digest(&namespace);
 
         if let Some(records) = self.record_maps.get_mut(&namespace) {
-            records.insert(record_digest, record);
+            records.insert(message_digest, record);
         } else {
             let mut records = FIFOMap::with_capacity(self.cap);
-            records.insert(record_digest, record);
+            records.insert(message_digest, record);
             self.record_maps.insert(namespace, records);
         }
     }

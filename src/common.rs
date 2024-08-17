@@ -1,5 +1,6 @@
 use std::{
     fmt,
+    net::SocketAddr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -44,6 +45,16 @@ impl Message {
 }
 
 #[derive(Debug, Error)]
+pub enum ClientError {
+    #[error("Write error: {0:?}")]
+    Write(#[from] WriteError),
+    #[error("Read error: {0:?}")]
+    Read(#[from] ReadError),
+    #[error("Subscription error: {0:?}")]
+    SubscriptionError(#[from] SubscriptionError),
+}
+
+#[derive(Debug, Error)]
 pub enum WriteError {
     #[error("Timed out")]
     Timeout,
@@ -59,6 +70,16 @@ pub enum ReadError {
     Timeout,
     #[error("No quorum reached, available: {available}, unavailable: {unavailable}")]
     NoQuorum { available: usize, unavailable: usize },
+}
+
+#[derive(Debug, Error)]
+pub enum SubscriptionError {
+    #[error("Timed out")]
+    Timeout,
+    #[error("Failed to connect to validator publisher socket")]
+    FailedToConnect,
+    #[error("Failed to subscribe to topic")]
+    FailedToSubscribe,
 }
 
 /// A type representing a UNIX millisecond timestamp
@@ -135,6 +156,22 @@ impl CertifiedRecord {
         } else {
             self.timestamps[self.timestamps.len() / 2]
         }
+    }
+
+    /// Returns the certified record from a list of records.
+    /// This method DOES NOT check the hash of each individual record message.
+    pub fn from_records_unchecked(records: &[Record]) -> Self {
+        let timestamps = records.iter().map(|r| r.timestamp).collect::<Vec<_>>();
+        let sigs = records.iter().map(|r| r.signature).collect::<Vec<_>>();
+        let message = records[0].message.clone();
+
+        // TODO: there's probably a better way to do this
+        let mut quorum_signature = AggregateSignature::from_signature(&sigs[0]);
+        for sig in sigs.iter().skip(1) {
+            quorum_signature.add_signature(sig, false);
+        }
+
+        CertifiedRecord { timestamps, message, quorum_signature }
     }
 }
 
@@ -288,6 +325,14 @@ impl Record {
 
         hasher.finalize()
     }
+
+    pub fn message_digest(&self, namespace: &Namespace) -> B256 {
+        let mut hasher = Keccak256::new();
+        hasher.update(namespace);
+        hasher.update(&self.message.0);
+
+        hasher.finalize()
+    }
 }
 
 /// An ordered list of records.
@@ -320,4 +365,10 @@ impl ValidatorIdentity {
     pub fn new(index: usize, pubkey: BlsPublicKey) -> Self {
         ValidatorIdentity { index, pubkey }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscribeResponse {
+    pub port: u16,
+    pub auth_token: Bytes,
 }

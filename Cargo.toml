@@ -7,6 +7,7 @@ default-run = "validator"
 [dependencies]
 # async
 tokio = { version = "1.39.2", features = ["full"] }
+tokio-stream = "0.1.15"
 async-trait = "0.1.81"
 futures = "0.3"
 axum = "0.7.5"
@@ -40,6 +41,7 @@ thiserror = "1"
 eyre = "0.6.12"
 url = "2.5.2"
 reqwest = "0.12.5"
+reqwest-eventsource = "0.6"
 rand = "0.8.5"
 
 

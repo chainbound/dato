@@ -8,8 +8,11 @@ pub trait ValidatorSpec {
     fn write(&mut self, namespace: Namespace, message: Message) -> Record;
 
     /// Reads a range of log records from the store within the given timestamps.
-    fn read(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log;
+    fn read_range(&self, namespace: Namespace, start: Timestamp, end: Timestamp) -> Log;
 
     /// Reads a single log record from the store by its message ID.
     fn read_message(&self, namespace: Namespace, msg_id: B256) -> ReadMessageResponse;
+
+    /// Allow clients to subscribe to all messages in a namespace.
+    fn subscribe(&mut self, namespace: Namespace);
 }
