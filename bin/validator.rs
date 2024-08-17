@@ -45,6 +45,7 @@ struct RegisterOpts {
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
+    let _ = tracing_subscriber::fmt::try_init();
     let opts = CliOpts::parse();
 
     match opts.cmd {
