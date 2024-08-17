@@ -23,7 +23,7 @@ We'll look at 3 use cases:
 Suppose Alice wants to trade an item with Bob over the internet in an atomic manner, meaning that both parties receive the item, or none do.
 This is known as the fair exchange problem, and it is generally unsolvable without a trusted third party (TTP).
 
-PBS is an example of this, where the relay (TTP) mediates the fair exchange by only delivering the payload to the proposer if the proposer has committed to the associated header. Decentralizing PBS could involve replacing the relay with a committee that, among other things, votes on the timeliness of the payload reveal (the [PTC design](https://ethresear.ch/t/payload-timeliness-committee-ptc-an-epbs-design/16054)). 
+PBS is an example of this, where the relay (TTP) mediates the fair exchange by only delivering the payload to the proposer if the proposer has committed to the associated header. Decentralizing PBS could involve replacing the relay with a committee that, among other things, votes on the timeliness of the payload reveal (the [PTC design](https://ethresear.ch/t/payload-timeliness-committee-ptc-an-epbs-design/16054)).
 
 Other duties like checking block validity and the block value could be done inside of a TEE like in [TEE-Boost](https://collective.flashbots.net/t/tee-boost/3741), but making sure the builder reveals the payload when a proposer has committed to it needs to be solved in another way (host machine can always censor incoming and outgoing TEE traffic).
 
@@ -65,6 +65,27 @@ A potential solution could look like this:
 The only way for proposers to steal the payloads from other proposers is for them to wait until the timelock is completed and collect the quorum certificate. Only then will they be able to broadcast their partial blocks, which would be too late and detectable.
 
 NOTE: this would require some added functionality to DATO for the time locking functionality.
+
+## Running
+You can run DATO yourself with the [`launch.sh`](./launch.sh) script.
+
+1. Build the client and validator images:
+```bash
+./launch.sh -b
+```
+
+2. Run the test setup with a registry file, for example with 200 validators:
+```bash
+./launch.sh -r registry-200.txt
+```
+
+This will run 200 validators, and 1 client. The client will connect to all validators. Simulated latency will be added
+to the links between the clients and the validators (between 0 and 400 by default, tune this limit with `-l`)
+
+You can then run the demo example with:
+```bash
+cargo run --example cr_feed
+```
 
 ## Further Work
 - Analyzing the security properties (tolerated threshold adversary, network models)
