@@ -139,19 +139,11 @@ async fn test_read_request_multiple_validators() -> eyre::Result<()> {
 async fn test_read_unavailable_message() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr1, pubkey1) = spin_up_validator().await?;
-    info!("Validator 1 listening on: {}", validator_addr1);
-
-    let (validator_addr2, pubkey2) = spin_up_validator().await?;
-    info!("Validator 2 listening on: {}", validator_addr2);
-
-    let (validator_addr3, pubkey3) = spin_up_validator().await?;
-    info!("Validator 3 listening on: {}", validator_addr3);
+    let (validator_addr, pubkey) = spin_up_validator().await?;
+    info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
-    client.connect(ValidatorIdentity::new(0, pubkey1), validator_addr1).await?;
-    client.connect(ValidatorIdentity::new(1, pubkey2), validator_addr2).await?;
-    client.connect(ValidatorIdentity::new(2, pubkey3), validator_addr3).await?;
+    client.connect(ValidatorIdentity::new(0, pubkey), validator_addr).await?;
     info!("Client connected to validators");
 
     let namespace: Namespace = Bytes::from_static(b"test").into();

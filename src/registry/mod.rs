@@ -8,10 +8,14 @@ use crate::ValidatorIdentity;
 pub mod contract;
 pub mod filesystem;
 
+/// An interface for querying the set of validators in the DATO network.
+/// This is used by clients to discover the set of sockets to connect to.
 #[async_trait]
 pub trait Registry {
+    /// Returns the number of validators in the network.
     async fn validator_count(&self) -> eyre::Result<u64>;
 
+    /// Returns a list of all validators in the network.
     async fn all_validators(&self) -> eyre::Result<Vec<ValidatorInfo>>;
 }
 

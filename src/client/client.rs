@@ -60,7 +60,7 @@ impl Client {
     /// Check if the quorum has been reached. A quorum is reached when the number of votes is
     /// greater than or equal to 2/3 of the total number of validators.
     fn quorum_reached(&self, votes: usize) -> bool {
-        votes >= 2 * self.validators.len() / 3
+        votes == self.validators.len() || votes >= (2 * self.validators.len()) / 3
     }
 }
 

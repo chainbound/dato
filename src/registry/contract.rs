@@ -25,6 +25,8 @@ pub struct ValidatorRegistry(
 );
 
 impl ValidatorRegistry {
+    /// Creates a new `ValidatorRegistry` instance with the given execution client URL and registry
+    /// address to interact with the `ValidatorRegistry` contract on an Ethereum network.
     pub fn new<U: Into<Url>>(execution_client_url: U, registry_address: Address) -> Self {
         let provider = ProviderBuilder::new().on_http(execution_client_url.into());
         let registry = ValidatorRegistryContract::new(registry_address, provider);
