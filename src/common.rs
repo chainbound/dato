@@ -89,9 +89,11 @@ impl Timestamp {
         Timestamp(since_the_epoch.as_millis())
     }
 
-    pub fn as_instant(&self) -> Instant {
-        let st = UNIX_EPOCH + Duration::from_millis(self.0 as u64);
-        Instant::from(st)
+    pub fn duration_since(&self, other: Instant) -> Duration {
+        let since_the_epoch =
+            SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
+        let now = since_the_epoch.as_millis();
+        Duration::from_millis(now as u64 - self.0 as u64) - other.elapsed()
     }
 }
 
