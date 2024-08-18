@@ -88,6 +88,11 @@ impl Timestamp {
         let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
         Timestamp(since_the_epoch.as_millis())
     }
+
+    pub fn as_instant(&self) -> Instant {
+        let st = UNIX_EPOCH + Duration::from_millis(self.0 as u64);
+        Instant::from(st)
+    }
 }
 
 impl From<u128> for Timestamp {

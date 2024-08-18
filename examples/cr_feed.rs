@@ -30,7 +30,7 @@ struct Args {
 
     /// Batch size
     #[arg(short, long, default_value = "100")]
-    batch_size: u64,
+    logs_batch_size: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,17 +93,25 @@ async fn main() {
                     info!("Subscribed to certified records")
                 }
                 Ok(Event::Message(msg)) => {
-                    let record = serde_json::from_str::<CertifiedRecord>(&msg.data).unwrap();
-                    // info!("Received certified record: {:?}", record);
+                    let mut record = serde_json::from_str::<CertifiedRecord>(&msg.data).unwrap();
+                    let median_timestamp = record.certified_timestamp();
+                    // Print the first last and median timestamp
 
                     let mut ts = timestamps_clone.lock().await;
                     if let Some(start_time) =
                         ts.remove(&alloy::hex::encode_prefixed(record.message.0))
                     {
+                        info!(
+                            "First timestamp: {:?}  Median timestamp: {:?} Last timestamp: {:?}",
+                            record.timestamps[0].duration_since(start_time),
+                            median_timestamp.duration_since(start_time),
+                            record.timestamps[record.timestamps.len() - 1]
+                                .duration_since(start_time),
+                        );
                         let duration = start_time.elapsed();
                         durations.push(duration);
 
-                        if durations.len() == args.batch_size as usize {
+                        if durations.len() == args.logs_batch_size as usize {
                             calculate_and_print_statistics(durations.clone());
                             durations.clear();
                         }
