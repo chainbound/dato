@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::mpsc::SendError,
     time::{Duration, Instant},
 };
 
@@ -564,7 +563,7 @@ impl ClientSpec for Client {
                 if has_reached_quorum(validators_count, records.len()) {
                     let certified_record = CertifiedRecord::from_records_unchecked(records);
                     if let Err(err) = certified_record_tx.send(certified_record).await {
-                        warn!("API consumer closed subscription, stopping background task");
+                        warn!(?err, "API consumer closed subscription, stopping background task");
                         return;
                     }
                 }

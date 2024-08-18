@@ -149,3 +149,12 @@ fn generate_random_message() -> String {
     let hex_chars: Vec<char> = "0123456789abcdef".chars().collect();
     format!("0x{}", (0..32).map(|_| hex_chars[rng.gen_range(0..16)]).collect::<String>())
 }
+
+/// Calculate and print the required statistics
+fn calculate_and_print_statistics(durations: Vec<Duration>) {
+    let count = durations.len() as u32;
+    let sum = durations.iter().sum::<Duration>();
+    let avg = sum / count;
+
+    info!("Statistics for the batch: Average time: {:?}", avg);
+}

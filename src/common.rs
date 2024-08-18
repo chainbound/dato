@@ -1,6 +1,6 @@
 use std::{
     fmt,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use alloy::primitives::{Bytes, Keccak256, B256};
