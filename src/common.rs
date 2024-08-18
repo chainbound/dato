@@ -1,6 +1,6 @@
 use std::{
     fmt,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use alloy::primitives::{Bytes, Keccak256, B256};
@@ -87,6 +87,13 @@ impl Timestamp {
         let start = SystemTime::now();
         let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
         Timestamp(since_the_epoch.as_millis())
+    }
+
+    pub fn duration_since(&self, other: Instant) -> Duration {
+        let since_the_epoch =
+            SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
+        let now = since_the_epoch.as_millis();
+        Duration::from_millis(now as u64 - self.0 as u64) - other.elapsed()
     }
 }
 
