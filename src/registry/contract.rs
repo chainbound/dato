@@ -1,12 +1,8 @@
-use std::{net::SocketAddr, str::FromStr};
-
 use alloy::{
-    contract::{Error as ContractError, Result as ContractResult},
-    primitives::{Address, Bytes},
+    primitives::Address,
     providers::{ProviderBuilder, RootProvider},
     sol,
-    sol_types::{Error as SolError, SolInterface},
-    transports::{http::Http, TransportError},
+    transports::http::Http,
 };
 use blst::min_pk::PublicKey as BlsPublicKey;
 use reqwest::Client;
@@ -14,10 +10,7 @@ use url::Url;
 
 use super::ValidatorInfo;
 
-use ValidatorRegistryContract::{
-    getValidatorByIndexReturn, getValidatorCountReturn, Validator,
-    ValidatorRegistryContractInstance,
-};
+use ValidatorRegistryContract::{Validator, ValidatorRegistryContractInstance};
 
 #[derive(Debug, Clone)]
 pub struct ValidatorRegistry(
@@ -104,8 +97,9 @@ sol! {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
-    use alloy::primitives::U256;
 
     #[tokio::test]
     async fn test_get_all_validators() -> eyre::Result<()> {

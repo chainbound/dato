@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use async_trait::async_trait;
 use blst::min_pk::PublicKey as BlsPublicKey;
 
