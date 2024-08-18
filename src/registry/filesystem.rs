@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
     path::PathBuf,
@@ -7,7 +6,7 @@ use std::{
 
 use blst::min_pk::PublicKey as BlsPublicKey;
 
-use super::{Registry, ValidatorInfo};
+use super::ValidatorInfo;
 
 /// A validator registry that reads from the filesystem and caches the results.
 pub struct ValidatorRegistry {

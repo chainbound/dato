@@ -51,10 +51,10 @@ async fn send_write_request(client: Arc<Client>, api_server: String, request: Wr
 /// 3. Aggregate a batch of n responses, and print:
 ///    - Average time between write request and the certified record event
 ///    - Median time between write request and the certified record event
-///    - P1, P(2x/3) and then certified timestamp
+///   P1, P(2x/3) and then certified timestamp
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let args = Args::parse();
     let client = Arc::new(Client::new());

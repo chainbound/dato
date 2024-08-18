@@ -138,6 +138,37 @@ async fn test_read_unavailable_message() -> eyre::Result<()> {
 }
 
 #[tokio::test]
+async fn test_read_certified() -> eyre::Result<()> {
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let (validator_addr, pubkey) = spin_up_validator().await?;
+    info!("Validator listening on: {}", validator_addr);
+
+    let mut client = Client::new();
+    client.connect_validator(ValidatorIdentity::new(0, pubkey), validator_addr).await?;
+    info!("Client connected to validators");
+
+    let namespace: Namespace = Bytes::from_static(b"test").into();
+    let message = Message(Bytes::from_static(b"made with chatgpt").into());
+
+    let start = Timestamp::now();
+    let record = client.write(namespace.clone(), message.clone()).await?;
+    info!(?record, "Wrote record");
+
+    assert_eq!(record.timestamps.len(), 1);
+
+    sleep(Duration::from_millis(300)).await;
+    let end = Timestamp::now();
+
+    let log = client.read_certified(namespace, start, end).await?;
+    info!(?log, "Read log");
+
+    assert_eq!(log.records.len(), 1);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_subscribe() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 

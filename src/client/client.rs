@@ -4,10 +4,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use alloy::primitives::{Bytes, B256};
+use alloy::primitives::B256;
 use async_trait::async_trait;
 use blst::min_pk::{AggregateSignature, PublicKey};
-use eyre::ContextCompat;
 use futures::stream::{FuturesUnordered, StreamExt};
 use hashmore::FIFOMap;
 use msg::{tcp::Tcp, ReqError, ReqSocket, SubSocket};
@@ -23,7 +22,7 @@ use crate::{
     common::{
         CertifiedLog, CertifiedReadMessageResponse, CertifiedRecord, CertifiedUnavailableMessage,
         ClientError, Log, Message, ReadError, ReadMessageResponse, Record, SubscribeResponse,
-        SubscriptionError, Timestamp, UnavailableMessage, ValidatorIdentity,
+        Timestamp, ValidatorIdentity,
     },
     primitives::{bls::verify_signature, Request},
     Namespace, WriteError,
@@ -176,6 +175,8 @@ impl ClientSpec for Client {
         Ok(certified_record)
     }
 
+    // TODO: this implementation can be sped up by using a single request to read all messages
+    // in the range and then filtering out the certified messages in a single pass.
     #[instrument(skip(self))]
     async fn read_certified(
         &self,
@@ -183,30 +184,27 @@ impl ClientSpec for Client {
         start: Timestamp,
         end: Timestamp,
     ) -> Result<CertifiedLog, ClientError> {
-        // let mut responses = FuturesUnordered::new();
+        // start by reading all messages in a range
+        let log = self.read(namespace.clone(), start, end).await?;
 
-        // let request = Request::Read { namespace: namespace.clone(), message: message.clone() };
-        // let serialized_req = request.serialize();
+        // for each message in the log, attempt to read the certified message
+        let mut certified_log = CertifiedLog::default();
+        for record in log.records {
+            let msg_id = record.message_digest(&namespace);
+            match self.read_message(namespace.clone(), msg_id).await {
+                Ok(CertifiedReadMessageResponse::Available(certified_record)) => {
+                    certified_log.records.push(certified_record);
+                }
+                Ok(CertifiedReadMessageResponse::Unavailable(_)) => {
+                    // skip unavailable messages
+                }
+                Err(e) => {
+                    warn!(error = %e, "Error reading certified message");
+                }
+            }
+        }
 
-        // for (index, socket) in &self.validator_sockets {
-        //     let cloned_req = serialized_req.clone();
-        //     responses.push(async {
-        //         // Send the request to the validator with a timeout.
-        //         match tokio::time::timeout(WRITE_TIMEOUT, socket.request(cloned_req)).await {
-        //             Ok(Ok(response)) => Some((*index, response)),
-        //             Ok(Err(e)) => {
-        //                 warn!(error = %e, "Error writing to validator {}", *index);
-        //                 None
-        //             }
-        //             Err(e) => {
-        //                 warn!(error = %e, "Timed out writing to validator {}", *index);
-        //                 None
-        //             }
-        //         }
-        //     });
-        // }
-
-        todo!()
+        Ok(certified_log)
     }
 
     #[instrument(skip(self))]
@@ -445,7 +443,6 @@ impl ClientSpec for Client {
 
     #[instrument(skip(self))]
     async fn subscribe(&self, namespace: Namespace) -> Result<ReceiverStream<Record>, ClientError> {
-        let start = Instant::now();
         let mut responses = FuturesUnordered::new();
 
         let request = Request::Subscribe { namespace: namespace.clone() };
@@ -493,10 +490,10 @@ impl ClientSpec for Client {
             let mut sub_socket = SubSocket::new(Tcp::default());
 
             let topic_string = String::from_utf8_lossy(&namespace).to_string();
-            for (pub_socket_addr, validator_index) in validator_publisher_sockets {
+            for (pub_socket_addr, _validator_index) in validator_publisher_sockets {
                 // TODO: use index to keep track of which validator we're connected to
 
-                let remote_addr = if let Err(err) = sub_socket.connect(pub_socket_addr).await {
+                if let Err(err) = sub_socket.connect(pub_socket_addr).await {
                     warn!(error = %err, "Failed to connect to validator publisher");
                     return;
                 };

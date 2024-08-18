@@ -7,7 +7,6 @@ latency_limit="400"
 
 build=false
 
-
 function usage() {
     echo "Usage: $0 -p <port> -r <registry_path> -l <latency_limit>"
     echo "  -p  Set the client API port (default: $client_port)"
