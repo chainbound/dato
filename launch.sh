@@ -3,7 +3,7 @@
 # Initialize variables
 client_port="8000"
 registry_path="registry-200.txt"
-latency_limit="400"
+latency_limit="150"
 
 build=false
 

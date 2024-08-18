@@ -103,10 +103,10 @@ async fn main() {
                     {
                         info!(
                             "First timestamp: {:?}  Median timestamp: {:?} Last timestamp: {:?}",
-                            record.timestamps[0].duration_since(start_time),
-                            median_timestamp.duration_since(start_time),
                             record.timestamps[record.timestamps.len() - 1]
                                 .duration_since(start_time),
+                            median_timestamp.duration_since(start_time),
+                            record.timestamps[0].duration_since(start_time),
                         );
                         let duration = start_time.elapsed();
                         durations.push(duration);
@@ -138,7 +138,7 @@ async fn main() {
             drop(permit); // Release semaphore permit
         });
 
-        sleep(Duration::from_millis(50)).await; // Throttle requests
+        sleep(Duration::from_millis(250)).await; // Throttle requests
     }
 
     info!("Finished sending {} transactions", args.num_txns);
