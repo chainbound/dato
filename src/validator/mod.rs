@@ -3,16 +3,15 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
 };
 
 use alloy::primitives::B256;
-use blst::min_pk::{SecretKey as BlsSecretKey, Signature};
+use blst::min_pk::SecretKey as BlsSecretKey;
 use bytes::Bytes;
-use futures::{ready, StreamExt};
-use hashbrown::{HashMap, HashSet};
-use msg::{tcp::Tcp, PubError, PubSocket, RepSocket, Request as MsgRequest};
-use tokio::{sync::mpsc, task::JoinHandle};
+use futures::StreamExt;
+use hashbrown::HashSet;
+use msg::{tcp::Tcp, PubError, PubSocket, RepSocket};
+use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
 mod store;
@@ -122,7 +121,7 @@ impl<DS: DataStore + 'static> Future for Validator<DS> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.get_mut();
+        let this = self.get_mut();
 
         let (publisher_queue_tx, mut publisher_queue_rx) = mpsc::channel(512);
 

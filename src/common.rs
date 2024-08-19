@@ -1,13 +1,9 @@
 use std::{
     fmt,
-    net::SocketAddr,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use alloy::{
-    hex::{decode_to_slice, encode_prefixed},
-    primitives::{Bytes, Keccak256, B256},
-};
+use alloy::primitives::{Bytes, Keccak256, B256};
 use blst::min_pk::{
     AggregateSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
     Signature as BlsSignature,
@@ -92,6 +88,13 @@ impl Timestamp {
         let since_the_epoch = start.duration_since(UNIX_EPOCH).expect("Time went backwards");
         Timestamp(since_the_epoch.as_millis())
     }
+
+    pub fn duration_since(&self, other: Instant) -> Duration {
+        let since_the_epoch =
+            SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
+        let now = since_the_epoch.as_millis();
+        Duration::from_millis(now as u64 - self.0 as u64) - other.elapsed()
+    }
 }
 
 impl From<u128> for Timestamp {
@@ -168,14 +171,14 @@ impl CertifiedRecord {
         // TODO: there's probably a better way to do this
         let mut quorum_signature = AggregateSignature::from_signature(&sigs[0]);
         for sig in sigs.iter().skip(1) {
-            quorum_signature.add_signature(sig, false);
+            let _ = quorum_signature.add_signature(sig, false);
         }
 
         CertifiedRecord { timestamps, message, quorum_signature }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CertifiedLog {
     pub records: Vec<CertifiedRecord>,
 }

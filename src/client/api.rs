@@ -1,26 +1,19 @@
-use std::{convert::Infallible, pin::Pin, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use alloy::primitives::{Bytes, B256};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::{
-        sse::{Event, KeepAlive, Sse},
-        IntoResponse,
-    },
+    response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
     BoxError, Json, Router,
 };
-use futures::{stream::once, Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
-use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, info, instrument};
 
-use crate::{
-    primitives::Request, CertifiedLog, CertifiedReadMessageResponse, CertifiedRecord, Log,
-    Timestamp,
-};
+use crate::{CertifiedLog, CertifiedReadMessageResponse, CertifiedRecord, Log};
 
 use super::{Client, ClientSpec};
 
@@ -74,7 +67,7 @@ async fn write(
         .write(namespace, request.message.into())
         .await
         .map(Json)
-        .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,7 +89,7 @@ async fn read(
         .read(namespace, params.start.into(), params.end.into())
         .await
         .map(Json)
-        .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 #[instrument(skip(client, params))]
@@ -111,7 +104,7 @@ async fn read_certified(
         .read_certified(namespace, params.start.into(), params.end.into())
         .await
         .map(Json)
-        .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 #[derive(Debug, Deserialize)]
@@ -132,7 +125,7 @@ async fn read_message(
         .read_message(namespace, params.msg_id)
         .await
         .map(Json)
-        .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 #[derive(Debug, Deserialize)]

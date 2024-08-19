@@ -1,11 +1,10 @@
-use alloy::primitives::{Bytes, B256};
+use alloy::primitives::B256;
 use async_trait::async_trait;
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
     common::{CertifiedReadMessageResponse, ClientError},
-    CertifiedLog, CertifiedRecord, Log, Message, Namespace, ReadError, ReadMessageResponse, Record,
-    Timestamp, WriteError,
+    CertifiedLog, CertifiedRecord, Log, Message, Namespace, Record, Timestamp,
 };
 
 #[async_trait]

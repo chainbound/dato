@@ -1,14 +1,8 @@
-use std::collections::VecDeque;
-
 use alloy::primitives::B256;
 use hashbrown::HashMap;
 use hashmore::FIFOMap;
-use tracing::warn;
 
-use crate::{
-    common::{Log, Namespace, Record, Timestamp},
-    Message,
-};
+use crate::common::{Log, Namespace, Record, Timestamp};
 
 /// A data store interface for reading and writing log records.
 pub trait DataStore: Send + Sync + Unpin {
