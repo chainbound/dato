@@ -45,7 +45,7 @@ if [ "$build" = true ]; then
     echo "Building docker images in $(pwd)"
     docker build -t dato-validator -f Dockerfile.validator --load .
     docker build -t dato-client -f Dockerfile.client --load .
-    
+
     exit 0
 fi
 
@@ -72,11 +72,18 @@ do
 done < "$registry_path"
 
 echo ""
-echo "Waiting 5 seconds for validators to start..."
-sleep 5
+echo "Waiting 3 seconds for validators to start..."
+sleep 3
 
 
 echo "Starting dato-client"
-docker run -d --network dato-net --name dato-client -p $client_port:$client_port -e RUST_LOG=trace dato-client --registry-path "/${registry_path}" --api-port $client_port
+docker run -d \
+    --network dato-net \
+    --name dato-client \
+    --mount type=bind,source="$(pwd)/${registry_path}",target="/${registry_path}",readonly \
+    -p $client_port:$client_port \
+    -e RUST_LOG=trace dato-client \
+    --registry-path "/${registry_path}" \
+    --api-port $client_port
 
 docker logs -f dato-client
