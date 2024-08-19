@@ -197,6 +197,7 @@ pub enum ReadMessageResponse {
     Unavailable(UnavailableMessage),
 }
 
+/// A certified "non-existence" record for a message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CertifiedUnavailableMessage {
     pub timestamps: Vec<Timestamp>,
@@ -218,7 +219,7 @@ impl CertifiedUnavailableMessage {
     }
 }
 
-/// An unavailable message response.
+/// A signed "non-existence" record for a message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnavailableMessage {
     pub timestamp: Timestamp,
@@ -252,7 +253,7 @@ impl UnavailableMessage {
     }
 }
 
-/// A record of a message at a particular time.
+/// A signed record of a message with an associated timestamp.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
     pub timestamp: Timestamp,

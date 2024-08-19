@@ -289,6 +289,7 @@ impl ClientSpec for Client {
         Ok(final_log)
     }
 
+    #[tracing::instrument(skip(self))]
     async fn read_message(
         &self,
         namespace: Namespace,
@@ -533,6 +534,7 @@ impl ClientSpec for Client {
         Ok(ReceiverStream::new(record_sub_rx))
     }
 
+    #[tracing::instrument(skip(self))]
     async fn subscribe_certified(
         &self,
         namespace: Namespace,
