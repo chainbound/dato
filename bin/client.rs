@@ -5,7 +5,7 @@ use clap::Parser;
 use eyre::{bail, eyre};
 use url::Url;
 
-use dato::{contract, filesystem, Client, Registry};
+use dato::{Client, FilesystemRegistry, Registry, SmartContractRegistry};
 
 #[derive(Debug, Parser)]
 struct CliOpts {
@@ -47,10 +47,10 @@ async fn main() -> eyre::Result<()> {
     let opts = CliOpts::parse();
 
     let registry: Box<dyn Registry> = if let Some(registry_path) = opts.registry_path {
-        Box::new(filesystem::ValidatorRegistry::read_from_file(registry_path)?)
+        Box::new(FilesystemRegistry::read_from_file(registry_path)?)
     } else if let Some(registry_addr) = opts.registry_address {
         let el_url = opts.execution_client_url.ok_or(eyre!("Missing Execution client URL"))?;
-        Box::new(contract::ValidatorRegistry::new(el_url, registry_addr))
+        Box::new(SmartContractRegistry::new(el_url, registry_addr))
     } else {
         bail!("Either 'registry_path' or 'registry_address' must be provided as a CLI argument");
     };

@@ -17,6 +17,7 @@ pub trait DataStore: Send + Sync + Unpin {
 }
 
 /// An in-memory backend for the data store.
+#[derive(Debug)]
 pub struct InMemoryStore {
     /// The maximum number of records to store per namespace.
     cap: usize,

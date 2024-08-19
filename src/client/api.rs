@@ -25,6 +25,7 @@ const SUBSCRIBE_PATH: &str = "/api/v1/subscribe";
 const SUBSCRIBE_CERTIFIED_PATH: &str = "/api/v1/subscribe_certified";
 
 impl Client {
+    /// Runs the API server on the given port and returns a handle to the spawned task.
     pub async fn run_api(self, port: u16) -> std::io::Result<JoinHandle<()>> {
         let router: Router = Router::new()
             .route(WRITE_PATH, post(write))

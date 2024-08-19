@@ -7,10 +7,11 @@ use crate::{
     CertifiedLog, CertifiedRecord, Log, Message, Namespace, Record, Timestamp,
 };
 
+/// A client specification for interacting with DATO network validators.
 #[async_trait]
 pub trait ClientSpec {
-    /// Write a message to the log for the given namespace. Returns the certified record or a write
-    /// error.
+    /// Write a message to the log for the given namespace.
+    /// Returns the certified record or a write error.
     async fn write(
         &self,
         namespace: Namespace,

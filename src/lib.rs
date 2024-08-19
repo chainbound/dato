@@ -1,3 +1,8 @@
+#![doc = include_str!("../README.md")]
+#![warn(missing_debug_implementations, missing_docs, rustdoc::all)]
+#![deny(unused_must_use, rust_2018_idioms)]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 mod common;
 pub use common::{
     CertifiedLog, CertifiedReadMessageResponse, CertifiedRecord, CertifiedUnavailableMessage, Log,
@@ -15,4 +20,4 @@ mod validator;
 pub use validator::{Validator, ValidatorSpec};
 
 mod registry;
-pub use registry::{contract, filesystem, Registry};
+pub use registry::{FilesystemRegistry, Registry, SmartContractRegistry};

@@ -36,6 +36,7 @@ const READ_TIMEOUT: Duration = Duration::from_millis(1000);
 
 /// A client that can write and read log records from validators.
 #[derive(Default)]
+#[allow(missing_debug_implementations)]
 pub struct Client {
     /// Mapping from validator public keys to their IDs.
     validators: HashMap<usize, PublicKey>,
@@ -289,7 +290,7 @@ impl ClientSpec for Client {
         Ok(final_log)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[instrument(skip(self))]
     async fn read_message(
         &self,
         namespace: Namespace,
@@ -534,7 +535,7 @@ impl ClientSpec for Client {
         Ok(ReceiverStream::new(record_sub_rx))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[instrument(skip(self))]
     async fn subscribe_certified(
         &self,
         namespace: Namespace,

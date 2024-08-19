@@ -1,3 +1,5 @@
+//! BLS (Boneh-Lynn-Shacham) signature utility methods.
+
 use blst::{
     min_pk::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey, Signature as BlsSignature},
     BLST_ERROR,

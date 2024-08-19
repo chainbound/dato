@@ -9,12 +9,15 @@ use blst::min_pk::PublicKey as BlsPublicKey;
 use super::ValidatorInfo;
 
 /// A validator registry that reads from the filesystem and caches the results.
-pub struct ValidatorRegistry {
+#[derive(Debug, Clone)]
+pub struct FilesystemRegistry {
+    /// The path to the file containing the validator information.
     pub path: PathBuf,
+    /// The list of validators loaded from the file.
     pub validators: Vec<ValidatorInfo>,
 }
 
-impl ValidatorRegistry {
+impl FilesystemRegistry {
     /// Create a new `ValidatorRegistry` that reads from the given path.
     ///
     /// The file should be a CSV with the following columns:

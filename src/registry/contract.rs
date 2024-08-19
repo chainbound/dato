@@ -12,12 +12,13 @@ use super::ValidatorInfo;
 
 use ValidatorRegistryContract::{Validator, ValidatorRegistryContractInstance};
 
+/// A smart-contract-based validator registry for the DATO network validators.
 #[derive(Debug, Clone)]
-pub struct ValidatorRegistry(
+pub struct SmartContractRegistry(
     ValidatorRegistryContractInstance<Http<Client>, RootProvider<Http<Client>>>,
 );
 
-impl ValidatorRegistry {
+impl SmartContractRegistry {
     /// Creates a new `ValidatorRegistry` instance with the given execution client URL and registry
     /// address to interact with the `ValidatorRegistry` contract on an Ethereum network.
     pub fn new<U: Into<Url>>(execution_client_url: U, registry_address: Address) -> Self {
@@ -103,7 +104,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_all_validators() -> eyre::Result<()> {
-        let registry = ValidatorRegistry::new(
+        let registry = SmartContractRegistry::new(
             Url::parse("http://localhost:8545")?,
             Address::from_str("0xYourContractAddressHere")?,
         );

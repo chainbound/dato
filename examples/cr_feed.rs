@@ -14,7 +14,7 @@ use tokio::{
     task,
     time::sleep,
 };
-use tracing::*;
+use tracing::{debug, error, info};
 
 use dato::CertifiedRecord;
 

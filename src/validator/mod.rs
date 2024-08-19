@@ -33,6 +33,7 @@ use crate::{
 ///
 /// The validator can read and write log records, as well as manage
 /// subscriptions to log records in a given namespace by clients.
+#[allow(missing_debug_implementations)]
 pub struct Validator<DS: DataStore> {
     /// Underlying data store backend for the validator log records
     store: DS,
@@ -50,6 +51,7 @@ pub struct Validator<DS: DataStore> {
 }
 
 impl Validator<InMemoryStore> {
+    /// Creates a new validator instance with an in-memory data store backend,
     pub async fn new_in_memory(secret_key: BlsSecretKey, port: u16) -> Result<Self, PubError> {
         Self::new(InMemoryStore::with_capacity(4096), secret_key, port).await
     }

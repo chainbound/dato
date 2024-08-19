@@ -3,8 +3,11 @@ use blst::min_pk::PublicKey as BlsPublicKey;
 
 use crate::ValidatorIdentity;
 
-pub mod contract;
-pub mod filesystem;
+mod contract;
+pub use contract::SmartContractRegistry;
+
+mod filesystem;
+pub use filesystem::FilesystemRegistry;
 
 /// An interface for querying the set of validators in the DATO network.
 /// This is used by clients to discover the set of sockets to connect to.
@@ -33,7 +36,7 @@ impl ValidatorInfo {
 }
 
 #[async_trait]
-impl Registry for contract::ValidatorRegistry {
+impl Registry for contract::SmartContractRegistry {
     async fn validator_count(&self) -> eyre::Result<u64> {
         self.get_validator_count().await
     }
@@ -44,7 +47,7 @@ impl Registry for contract::ValidatorRegistry {
 }
 
 #[async_trait]
-impl Registry for filesystem::ValidatorRegistry {
+impl Registry for filesystem::FilesystemRegistry {
     async fn validator_count(&self) -> eyre::Result<u64> {
         Ok(self.validators.len() as u64)
     }
