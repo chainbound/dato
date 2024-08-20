@@ -20,7 +20,7 @@ In this document, we introduce DATO, a consensus-less approach to timekeeping th
 be used in a variety of applications to achieve one of the following benefits:
 
 1. **Fair exchange accountability** for applications like [PBS][pbs] and [TEE-Boost][tee-boost]
-2. **Censorship-resistant message feeds** for e.g. single-sequencer protocols like rollups
+2. **Censorship-resistant message feeds** for e.g. single-sequencer protocols like rollups or TEEs
 
 ### High-level Design
 

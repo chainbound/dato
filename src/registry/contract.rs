@@ -100,10 +100,19 @@ sol! {
 mod tests {
     use std::str::FromStr;
 
+    use tracing::warn;
+
     use super::*;
 
     #[tokio::test]
     async fn test_get_all_validators() -> eyre::Result<()> {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        if reqwest::get("http://localhost:8545").await.is_err() {
+            warn!("Skipping test_get_all_validators, as the Ethereum node is not running.");
+            return Ok(());
+        }
+
         let registry = SmartContractRegistry::new(
             Url::parse("http://localhost:8545")?,
             Address::from_str("0xYourContractAddressHere")?,
