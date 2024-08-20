@@ -100,9 +100,9 @@ impl Timestamp {
     }
 
     /// Returns the duration since the given timestamp.
-    pub fn duration_since(&self, other: Instant) -> Duration {
+    pub fn duration_since(&self, start_time: Instant) -> Duration {
         let since = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
-        Duration::from_millis(since.as_millis() as u64 - self.0 as u64) - other.elapsed()
+        Duration::from_millis(since.as_millis() as u64 - self.0 as u64) - start_time.elapsed()
     }
 }
 
