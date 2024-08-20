@@ -1,14 +1,15 @@
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use clap::Parser;
 use futures::StreamExt;
 use rand::Rng;
 use reqwest::Client;
 use reqwest_eventsource::{Event, EventSource};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use tokio::{
     sync::{Mutex, Semaphore},
     task,
