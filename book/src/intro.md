@@ -43,8 +43,8 @@ Here is a high-level diagram of the happy-case flow:
 
 1. A client sends a message $M$ to all $N$ validators
 2. Each validator signs the message and their local timestamp, and sends it back to the client
-3. The client waits until a quorum of $2/3$ signatures is reached, and then calculates the median timestamp
-4. The client aggregates the signatures into a quorum certificate that can be used to prove the timestamp
+3. The client waits until a quorum of $2/3$ signatures is reached and calculates the median timestamp
+4. The client aggregates the signatures into a quorum certificate that can be used out of band
 
 On top of this functionality, DATO also provides a way to obtain _unavailability_ certificates
 for individual messages, to prove that a message was not seen by a quorum of validators at a
