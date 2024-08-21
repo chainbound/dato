@@ -37,7 +37,7 @@ done
 
 # Output the input options for verification
 echo "Client Port: $client_port"
-echo "Registry location: $registry_path"
+echo "Registry location: ./demo/$registry_path"
 echo "Latency Limit: $latency_limit"
 
 if [ "$build" = true ]; then
@@ -68,7 +68,7 @@ do
     echo "Executing command: $cmd"
     # Add latency to the validator instance
     docker exec $instance $cmd
-done < "$registry_path"
+done < "./demo/$registry_path"
 
 echo ""
 echo "Waiting 3 seconds for validators to start..."
@@ -79,7 +79,7 @@ echo "Starting dato-client"
 docker run -d \
     --network dato-net \
     --name dato-client \
-    --mount type=bind,source="$(pwd)/${registry_path}",target="/${registry_path}",readonly \
+    --mount type=bind,source="$(pwd)/demo/${registry_path}",target="/${registry_path}",readonly \
     -p $client_port:$client_port \
     -e RUST_LOG=trace dato-client \
     --registry-path "/${registry_path}" \

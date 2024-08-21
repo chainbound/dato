@@ -99,9 +99,8 @@ impl<DS: DataStore + 'static> Validator<DS> {
         let mut conn = RepSocket::new(Tcp::default());
         conn.bind(("0.0.0.0", port)).await?;
 
-        // TODO: add configurable port for publisher socket as well
         let mut pub_socket = PubSocket::new(Tcp::default());
-        pub_socket.bind(("0.0.0.0", port + 1)).await?;
+        pub_socket.bind(("0.0.0.0", 0)).await?;
 
         Ok(Self {
             store,
