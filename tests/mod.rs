@@ -4,7 +4,7 @@ use alloy::primitives::B256;
 use bytes::Bytes;
 use futures::StreamExt;
 use tokio::time::sleep;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 mod hurl;
 
@@ -20,7 +20,7 @@ use dato::{
 async fn test_write_request() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr, pubkey) = spin_up_validator().await?;
+    let (validator_addr, pubkey) = spin_up_validator(Some(231)).await?;
     info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
@@ -44,7 +44,7 @@ async fn test_write_request() -> eyre::Result<()> {
 async fn test_read_request_single_validator() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr, pubkey) = spin_up_validator().await?;
+    let (validator_addr, pubkey) = spin_up_validator(Some(231)).await?;
     info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
@@ -76,13 +76,13 @@ async fn test_read_request_single_validator() -> eyre::Result<()> {
 async fn test_read_request_multiple_validators() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr1, pubkey1) = spin_up_validator().await?;
+    let (validator_addr1, pubkey1) = spin_up_validator(Some(231)).await?;
     info!("Validator 1 listening on: {}", validator_addr1);
 
-    let (validator_addr2, pubkey2) = spin_up_validator().await?;
+    let (validator_addr2, pubkey2) = spin_up_validator(Some(242)).await?;
     info!("Validator 2 listening on: {}", validator_addr2);
 
-    let (validator_addr3, pubkey3) = spin_up_validator().await?;
+    let (validator_addr3, pubkey3) = spin_up_validator(Some(253)).await?;
     info!("Validator 3 listening on: {}", validator_addr3);
 
     let mut client = Client::new();
@@ -99,7 +99,7 @@ async fn test_read_request_multiple_validators() -> eyre::Result<()> {
     info!(?record, "Wrote record");
 
     // we expect 2 instead of 3 because the quorum is 2/3
-    assert_eq!(record.timestamps.len(), 2);
+    assert_eq!(record.timestamps.iter().filter(|&ts| *ts != Timestamp::default()).count(), 2);
 
     sleep(Duration::from_millis(300)).await;
     let end = Timestamp::now();
@@ -116,7 +116,7 @@ async fn test_read_request_multiple_validators() -> eyre::Result<()> {
 async fn test_read_unavailable_message() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr, pubkey) = spin_up_validator().await?;
+    let (validator_addr, pubkey) = spin_up_validator(Some(231)).await?;
     info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
@@ -141,7 +141,7 @@ async fn test_read_unavailable_message() -> eyre::Result<()> {
 async fn test_read_certified() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr, pubkey) = spin_up_validator().await?;
+    let (validator_addr, pubkey) = spin_up_validator(Some(231)).await?;
     info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
@@ -172,7 +172,7 @@ async fn test_read_certified() -> eyre::Result<()> {
 async fn test_subscribe() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr, pubkey) = spin_up_validator().await?;
+    let (validator_addr, pubkey) = spin_up_validator(Some(231)).await?;
     info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
@@ -207,7 +207,7 @@ async fn test_subscribe() -> eyre::Result<()> {
 async fn test_subscribe_certified() -> eyre::Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let (validator_addr, pubkey) = spin_up_validator().await?;
+    let (validator_addr, pubkey) = spin_up_validator(Some(231)).await?;
     info!("Validator listening on: {}", validator_addr);
 
     let mut client = Client::new();
@@ -225,6 +225,51 @@ async fn test_subscribe_certified() -> eyre::Result<()> {
 
     let received = stream.next().await.expect("Received message");
     assert_eq!(received.message, record.message);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_subscribe_certified_many() -> eyre::Result<()> {
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let (validator_addr1, pubkey1) = spin_up_validator(Some(231)).await?;
+    info!("Validator 1 listening on: {}", validator_addr1);
+
+    let (validator_addr2, pubkey2) = spin_up_validator(Some(233)).await?;
+    info!("Validator 2 listening on: {}", validator_addr2);
+
+    let (validator_addr3, pubkey3) = spin_up_validator(Some(235)).await?;
+    info!("Validator 3 listening on: {}", validator_addr3);
+
+    let mut client = Client::new();
+    client.connect_validator(ValidatorIdentity::new(0, pubkey1), validator_addr1).await?;
+    client.connect_validator(ValidatorIdentity::new(1, pubkey2), validator_addr2).await?;
+    client.connect_validator(ValidatorIdentity::new(2, pubkey3), validator_addr3).await?;
+    info!("Client connected to validators");
+
+    let namespace: Namespace = Bytes::from_static(b"test").into();
+    let mut stream = client.subscribe_certified(namespace.clone()).await?;
+    info!("Subscribed to certified namespace");
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    for i in 1..=25 {
+        let message_content = format!("message {}", i);
+        let message = Message(Bytes::from(message_content.clone()).into());
+        let record = client.write(namespace.clone(), message).await?;
+        info!("Wrote record {:?}", record.message);
+    }
+
+    for i in 1..=100 {
+        if let Some(received) = stream.next().await {
+            info!("Received certified record {}: {:?}", i, received.message);
+            info!("Timestamps: {:?}", received.timestamps);
+            // assert_eq!(received.message, record.message);
+        } else {
+            error!("Failed to receive certified record {}", i);
+        }
+    }
 
     Ok(())
 }

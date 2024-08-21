@@ -99,9 +99,15 @@ async fn main() {
                     // Print the first last and median timestamp
 
                     let mut ts = timestamps_clone.lock().await;
-                    if let Some(start_time) =
-                        ts.remove(&alloy::hex::encode_prefixed(record.message.0))
-                    {
+
+                    let message = alloy::hex::encode_prefixed(record.message.0);
+                    debug!("Received certified record message: {:?}", message);
+
+                    if let Some(start_time) = ts.remove(&message) {
+                        let duration = start_time.elapsed();
+                        debug!("duration: {:?}", duration);
+                        durations.push(duration);
+
                         info!(
                             "First timestamp: {:?}  Median timestamp: {:?} Last timestamp: {:?}",
                             record.timestamps[record.timestamps.len() - 1]
@@ -109,8 +115,6 @@ async fn main() {
                             median_timestamp.duration_since(start_time),
                             record.timestamps[0].duration_since(start_time),
                         );
-                        let duration = start_time.elapsed();
-                        durations.push(duration);
 
                         if durations.len() == args.logs_batch_size as usize {
                             calculate_and_print_statistics(durations.clone());
@@ -153,9 +157,10 @@ fn generate_random_message() -> String {
 
 /// Calculate and print the required statistics
 fn calculate_and_print_statistics(durations: Vec<Duration>) {
+    debug!("Durations: {:?}", durations);
     let count = durations.len() as u32;
     let sum = durations.iter().sum::<Duration>();
     let avg = sum / count;
 
-    info!("Statistics for the batch: Average time: {:?}", avg);
+    info!("Batch Statistics: Average round-trip time: {:?}", avg);
 }
