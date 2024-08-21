@@ -540,34 +540,45 @@ impl ClientSpec for Client {
         &self,
         namespace: Namespace,
     ) -> Result<ReceiverStream<CertifiedRecord>, ClientError> {
-        // perform a regular subscription to get all records
+        // Perform a regular subscription to get all records
         let mut record_stream = self.subscribe(namespace.clone()).await?;
 
         let (certified_record_tx, certified_record_rx) = mpsc::channel(512);
         let validators_count = self.validators.len();
 
-        // spawn a background task to aggregate records into certified records and
+        // Spawn a background task to aggregate records into certified records and
         // send them to the consumer stream
-        tokio::spawn(async move {
-            let mut records_by_id = FIFOMap::<B256, Vec<Record>>::with_capacity(1024);
+        tokio::spawn({
+            let namespace = namespace.clone();
+            async move {
+                let mut records_by_id = FIFOMap::<B256, Vec<Record>>::with_capacity(1024);
 
-            while let Some(record) = record_stream.next().await {
-                let id = record.message_digest(&namespace);
+                while let Some(record) = record_stream.next().await {
+                    let id = record.message_digest(&namespace);
 
-                // TODO: clean this up with FIFOMap::entry API when available
-                let records = if let Some(records) = records_by_id.get_mut(&id) {
+                    // Use FIFOMap's entry API or handle insertion and retrieval more concisely
+                    let records = match records_by_id.get_mut(&id) {
+                        Some(records) => records,
+                        None => {
+                            records_by_id.insert(id, Vec::new());
+                            records_by_id.get_mut(&id).unwrap()
+                        }
+                    };
                     records.push(record);
-                    records
-                } else {
-                    records_by_id.insert(id, vec![record]);
-                    records_by_id.get_mut(&id).unwrap()
-                };
 
-                if has_reached_quorum(validators_count, records.len()) {
-                    let certified_record = CertifiedRecord::from_records_unchecked(records);
-                    if let Err(err) = certified_record_tx.send(certified_record).await {
-                        warn!(?err, "API consumer closed subscription, stopping background task");
-                        return;
+                    if has_reached_quorum(validators_count, records.len()) {
+                        let certified_record =
+                            CertifiedRecord::from_records_unchecked(&records.clone());
+                        if let Err(err) = certified_record_tx.send(certified_record).await {
+                            warn!(
+                                ?err,
+                                "API consumer closed subscription, stopping background task"
+                            );
+                            break;
+                        }
+                        // Remove the records after creating the certified record to avoid
+                        // duplicates
+                        records_by_id.remove(&id);
                     }
                 }
             }
@@ -580,10 +591,22 @@ impl ClientSpec for Client {
 /// Function to compute if the quorum has been reached. A quorum is reached when the number of votes
 /// is greater than or equal to 2/3 of the total number of validators.
 fn has_reached_quorum(total_validators: usize, votes: usize) -> bool {
-    if total_validators < 3 {
-        // 1 of 1 or 2 of 2 validators == quorum
-        return votes == total_validators;
-    }
+    votes >= (2 * total_validators + 2) / 3
+}
 
-    votes >= 2 * total_validators / 3
+/// Test for testing quorum calculation.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_quorum() {
+        assert!(has_reached_quorum(3, 2));
+        assert!(has_reached_quorum(3, 3));
+        assert!(!has_reached_quorum(3, 1));
+        assert!(!has_reached_quorum(4, 2));
+        assert!(has_reached_quorum(1, 1));
+        assert!(has_reached_quorum(2, 2));
+        assert!(!has_reached_quorum(2, 1));
+    }
 }
